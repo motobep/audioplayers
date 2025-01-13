@@ -292,7 +292,6 @@ void AudioPlayer::OnLog(const gchar* message) {
 }
 
 void AudioPlayer::SetGain(int bandIndex, float value) {
-  printf("[C]: setGain\n");
   if (!equalizer) {
     this->OnLog("Equalizer was not initialized");
     return;
@@ -303,7 +302,6 @@ void AudioPlayer::SetGain(int bandIndex, float value) {
 }
 
 void AudioPlayer::SetBandwidth(int bandIndex, float value) {
-  printf("[C]: SetBandwidth\n");
   if (!equalizer) {
     this->OnLog("Equalizer was not initialized");
     return;
@@ -314,7 +312,6 @@ void AudioPlayer::SetBandwidth(int bandIndex, float value) {
 }
 
 void AudioPlayer::SetFrequency(int bandIndex, float value) {
-  printf("[C]: SetFreq\n");
   if (!equalizer) {
     this->OnLog("Equalizer was not initialized");
     return;
