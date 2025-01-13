@@ -20,6 +20,8 @@ extern "C" {
 #include <gst/gst.h>
 }
 
+#define __AUDIO_PLAYER_NUM_BUNDS 10
+
 class AudioPlayer {
  public:
   AudioPlayer(std::string playerId,
@@ -41,6 +43,12 @@ class AudioPlayer {
   void Resume();
 
   void Dispose();
+
+  void SetGain(int bandIndex, float value);
+
+  void SetBandwidth(int bandIndex, float value);
+
+  void SetFrequency(int bandIndex, float value);
 
   void SetBalance(float balance);
 
@@ -69,10 +77,11 @@ class AudioPlayer {
   // Gst members
   GstElement* playbin = nullptr;
   GstElement* source = nullptr;
+  GstElement* equalizer = nullptr;
   GstElement* panorama = nullptr;
   GstElement* audiobin = nullptr;
   GstElement* audiosink = nullptr;
-  GstPad* panoramaSinkPad = nullptr;
+  GstPad* sinkPad = nullptr;
   GstBus* bus = nullptr;
 
   bool _isInitialized = false;
@@ -84,6 +93,10 @@ class AudioPlayer {
   std::string _url{};
   std::string _playerId;
   FlEventChannel* _eventChannel;
+
+  GObject* eqBands[__AUDIO_PLAYER_NUM_BUNDS];
+
+  static const int eqNumBands = __AUDIO_PLAYER_NUM_BUNDS;
 
   static void SourceSetup(GstElement* playbin,
                           GstElement* source,

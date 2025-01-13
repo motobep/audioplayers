@@ -90,6 +90,45 @@ mixin MethodChannelAudioplayersPlatform
   }
 
   @override
+  Future<void> setGain(
+    String playerId,
+    int bandIndex,
+    double value,
+  ) {
+    return _call(
+      'setGain',
+      playerId,
+      <String, dynamic>{'bandIndex': bandIndex, 'gain': value},
+    );
+  }
+
+  @override
+  Future<void> setBandwidth(
+    String playerId,
+    int bandIndex,
+    double value,
+  ) {
+    return _call(
+      'setBandwidth',
+      playerId,
+      <String, dynamic>{'bandIndex': bandIndex, 'bandwidth': value},
+    );
+  }
+
+  @override
+  Future<void> setFrequency(
+    String playerId,
+    int bandIndex,
+    double value,
+  ) {
+    return _call(
+      'setFrequency',
+      playerId,
+      <String, dynamic>{'bandIndex': bandIndex, 'frequency': value},
+    );
+  }
+
+  @override
   Future<void> setBalance(
     String playerId,
     double balance,

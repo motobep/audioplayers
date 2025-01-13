@@ -3,6 +3,15 @@
 #define STR_LINK_TROUBLESHOOTING \
   "https://github.com/bluefireteam/audioplayers/blob/main/troubleshooting.md"
 
+inline float getInBounds(float value, float min, float max) {
+  if (value > max) {
+    return max;
+  } else if (value < min) {
+    return min;
+  }
+  return value;
+}
+
 AudioPlayer::AudioPlayer(std::string playerId,
                          FlMethodChannel* methodChannel,
                          FlEventChannel* eventChannel)
@@ -17,22 +26,38 @@ AudioPlayer::AudioPlayer(std::string playerId,
     throw "Not all elements could be created.";
   }
 
-  // Setup stereo balance controller
+  // Setup equalizer and stereo balance controller
+  equalizer = gst_element_factory_make("equalizer-nbands", "equalizer");
   panorama = gst_element_factory_make("audiopanorama", NULL);
-  if (panorama) {
+  if (equalizer && panorama) {
     audiobin = gst_bin_new(NULL);
     audiosink = gst_element_factory_make("autoaudiosink", NULL);
 
-    gst_bin_add_many(GST_BIN(audiobin), panorama, audiosink, NULL);
-    gst_element_link(panorama, audiosink);
+    gst_bin_add_many(GST_BIN(audiobin), equalizer, panorama, audiosink, NULL);
+    if (!gst_element_link_many(equalizer, panorama, audiosink, NULL)) {
+      throw "Can't link elements\n";
+    }
 
-    GstPad* sinkpad = gst_element_get_static_pad(panorama, "sink");
-    panoramaSinkPad = gst_ghost_pad_new("sink", sinkpad);
-    gst_element_add_pad(audiobin, panoramaSinkPad);
-    gst_object_unref(GST_OBJECT(sinkpad));
+    GstPad* pad = gst_element_get_static_pad(equalizer, "sink");
+    sinkPad = gst_ghost_pad_new("sink", pad);
+    gst_element_add_pad(audiobin, sinkPad);
+    gst_object_unref(GST_OBJECT(pad));
 
     g_object_set(G_OBJECT(playbin), "audio-sink", audiobin, NULL);
     g_object_set(G_OBJECT(panorama), "method", 1, NULL);
+    g_object_set(G_OBJECT(equalizer), "num-bands", AudioPlayer::eqNumBands,
+                 NULL);
+
+    // Set bands
+    for (int i = 0; i < AudioPlayer::eqNumBands; i++) {
+      eqBands[i] =
+          gst_child_proxy_get_child_by_index(GST_CHILD_PROXY(equalizer), i);
+
+      // Set initial values
+      SetGain(i, 0.0);
+      SetBandwidth(i, 0.0);
+      SetFrequency(i, 20.0);
+    }
   }
 
   // Setup source options
@@ -266,6 +291,39 @@ void AudioPlayer::OnLog(const gchar* message) {
   }
 }
 
+void AudioPlayer::SetGain(int bandIndex, float value) {
+  printf("[C]: setGain\n");
+  if (!equalizer) {
+    this->OnLog("Equalizer was not initialized");
+    return;
+  }
+
+  value = getInBounds(value, -24.0, 12.0);
+  g_object_set(AudioPlayer::eqBands[bandIndex], "gain", value, NULL);
+}
+
+void AudioPlayer::SetBandwidth(int bandIndex, float value) {
+  printf("[C]: SetBandwidth\n");
+  if (!equalizer) {
+    this->OnLog("Equalizer was not initialized");
+    return;
+  }
+
+  value = getInBounds(value, 0.0, 20000.0);
+  g_object_set(AudioPlayer::eqBands[bandIndex], "bandwidth", value, NULL);
+}
+
+void AudioPlayer::SetFrequency(int bandIndex, float value) {
+  printf("[C]: SetFreq\n");
+  if (!equalizer) {
+    this->OnLog("Equalizer was not initialized");
+    return;
+  }
+
+  value = getInBounds(value, 20.0, 20000.0);
+  g_object_set(AudioPlayer::eqBands[bandIndex], "freq", value, NULL);
+}
+
 void AudioPlayer::SetBalance(float balance) {
   if (!panorama) {
     this->OnLog("Audiopanorama was not initialized");
@@ -454,15 +512,17 @@ void AudioPlayer::Dispose() {
     source = nullptr;
   }
 
-  if (panorama) {
+  if (equalizer && panorama) {
     gst_element_set_state(audiobin, GST_STATE_NULL);
 
-    gst_element_remove_pad(audiobin, panoramaSinkPad);
+    gst_element_remove_pad(audiobin, sinkPad);
     gst_bin_remove(GST_BIN(audiobin), audiosink);
     gst_bin_remove(GST_BIN(audiobin), panorama);
+    gst_bin_remove(GST_BIN(audiobin), equalizer);
 
     // audiobin gets unreferenced (2x) via playbin
     panorama = nullptr;
+    equalizer = nullptr;
   }
 
   gst_object_unref(GST_OBJECT(playbin));

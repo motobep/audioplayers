@@ -199,6 +199,30 @@ static void audioplayers_linux_plugin_handle_method_call(
     } else if (strcmp(method, "setPlayerMode") == 0) {
       // TODO check support for low latency mode:
       // https://gstreamer.freedesktop.org/documentation/additional/design/latency.html?gi-language=c
+    } else if (strcmp(method, "setGain") == 0) {
+      auto flBandIndex = fl_value_lookup_string(args, "bandIndex");
+      int bandIndex =
+          flBandIndex == nullptr ? 0 : fl_value_get_int(flBandIndex);
+
+      auto flValue = fl_value_lookup_string(args, "gain");
+      double value = flValue == nullptr ? 0.0f : fl_value_get_float(flValue);
+      player->SetGain(bandIndex, value);
+    } else if (strcmp(method, "setBandwidth") == 0) {
+      auto flBandIndex = fl_value_lookup_string(args, "bandIndex");
+      int bandIndex =
+          flBandIndex == nullptr ? 0 : fl_value_get_int(flBandIndex);
+
+      auto flValue = fl_value_lookup_string(args, "bandwidth");
+      double value = flValue == nullptr ? 0.0f : fl_value_get_float(flValue);
+      player->SetBandwidth(bandIndex, value);
+    } else if (strcmp(method, "setFrequency") == 0) {
+      auto flBandIndex = fl_value_lookup_string(args, "bandIndex");
+      int bandIndex =
+          flBandIndex == nullptr ? 0 : fl_value_get_int(flBandIndex);
+
+      auto flValue = fl_value_lookup_string(args, "frequency");
+      double value = flValue == nullptr ? 20.0f : fl_value_get_float(flValue);
+      player->SetFrequency(bandIndex, value);
     } else if (strcmp(method, "setBalance") == 0) {
       auto flBalance = fl_value_lookup_string(args, "balance");
       double balance =

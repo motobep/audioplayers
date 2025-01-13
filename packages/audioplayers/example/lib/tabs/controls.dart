@@ -1,3 +1,6 @@
+import 'dart:io' show Platform;
+import 'dart:math' show pow;
+
 import 'package:audioplayers/audioplayers.dart';
 import 'package:audioplayers_example/components/btn.dart';
 import 'package:audioplayers_example/components/list_tile.dart';
@@ -51,6 +54,75 @@ class _ControlsTabState extends State<ControlsTab>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+
+    final eqChildren = Platform.isLinux
+        ? [
+            const Padding(
+              padding: EdgeInsets.only(bottom: 8.0),
+              child: Text('${AudioPlayer.eqNumBands} band EQ'),
+            ),
+            ...(List.generate(AudioPlayer.eqNumBands, (i) => i).map(
+              (i) {
+                const gain = 0.0;
+                final freq = 32.0 * pow(2, i);
+                final bw = _caldBandwidth(freq, 1.5);
+
+                widget.player.setGain(i, gain);
+                widget.player.setBandwidth(i, bw);
+                widget.player.setFrequency(i, freq);
+
+                return Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10.0),
+                      child: Text(
+                        '№ $i band',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: _EqSlider(
+                        name: 'Gain',
+                        value: gain,
+                        min: -24.0,
+                        max: 12.0,
+                        onChangeEnd: (value) {
+                          widget.player.setGain(i, value);
+                        },
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: _EqSlider(
+                        name: 'Bandwidth',
+                        value: bw,
+                        min: 0.0,
+                        max: 20000.0,
+                        onChangeEnd: (value) {
+                          widget.player.setBandwidth(i, value);
+                        },
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8.0, bottom: 32.0),
+                      child: _EqSlider(
+                        name: 'Frequency Hz',
+                        value: freq,
+                        min: 20.0,
+                        max: 20000.0,
+                        onChangeEnd: (value) {
+                          widget.player.setFrequency(i, value);
+                        },
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ).toList()),
+          ]
+        : [const SizedBox.shrink()];
+
     return TabContent(
       children: [
         WrappedListTile(
@@ -176,12 +248,82 @@ class _ControlsTabState extends State<ControlsTab>
             ),
           ],
         ),
+        ...eqChildren,
       ],
     );
   }
 
   @override
   bool get wantKeepAlive => true;
+}
+
+/// bandwidth = (center frequency) / (Q factor)
+double _caldBandwidth(double centerFreq, double qFactor) {
+  return centerFreq / qFactor;
+}
+
+class _EqSlider extends StatefulWidget {
+  const _EqSlider({
+    required this.onChangeEnd,
+    required this.name,
+    required this.value,
+    required this.min,
+    required this.max,
+  });
+
+  final void Function(double) onChangeEnd;
+  final String name;
+  final double value;
+  final double min;
+  final double max;
+
+  @override
+  State<_EqSlider> createState() => _EqSliderState();
+}
+
+class _EqSliderState extends State<_EqSlider> {
+  late double _value;
+
+  @override
+  void initState() {
+    _value = widget.value;
+    super.initState();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('${widget.min}'),
+              Text('${widget.name} $_value'),
+              Text('${widget.max}'),
+            ],
+          ),
+        ),
+        Slider(
+          min: widget.min,
+          max: widget.max,
+          value: _value,
+          onChanged: (value) {
+            setState(() {
+              _value = value;
+            });
+          },
+          onChangeEnd: (value) {
+            widget.onChangeEnd(value);
+            setState(() {
+              _value = value;
+            });
+          },
+        ),
+      ],
+    );
+  }
 }
 
 class _SeekDialog extends StatelessWidget {
