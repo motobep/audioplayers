@@ -131,6 +131,38 @@ class WebAudioplayersPlatform extends AudioplayersPlatformInterface {
   }
 
   @override
+  Future<void> setGain(String playerId, int bandIndex, double value) async {
+    throw PlatformException(
+      code: 'WebAudioError',
+      message: 'setGain() not implemented',
+    );
+  }
+
+  @override
+  Future<void> setBandwidth(
+    String playerId,
+    int bandIndex,
+    double value,
+  ) async {
+    throw PlatformException(
+      code: 'WebAudioError',
+      message: 'setBandwidth() not implemented',
+    );
+  }
+
+  @override
+  Future<void> setFrequency(
+    String playerId,
+    int bandIndex,
+    double value,
+  ) async {
+    throw PlatformException(
+      code: 'WebAudioError',
+      message: 'setFrequency() not implemented',
+    );
+  }
+
+  @override
   Future<void> setBalance(String playerId, double balance) async {
     getPlayer(playerId).balance = balance;
   }

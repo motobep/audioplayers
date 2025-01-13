@@ -98,6 +98,47 @@ class FakeAudioplayersPlatform extends AudioplayersPlatformInterface {
   }
 
   @override
+  Future<void> setGain(String playerId, int bandIndex, double value) async {
+    calls.add(
+      FakeCall(
+        id: playerId,
+        method: 'setGain',
+        value: <String, dynamic>{'bandIndex': bandIndex, 'gain': value},
+      ),
+    );
+  }
+
+  @override
+  Future<void> setBandwidth(
+    String playerId,
+    int bandIndex,
+    double value,
+  ) async {
+    calls.add(
+      FakeCall(
+        id: playerId,
+        method: 'setBandwidth',
+        value: <String, dynamic>{'bandIndex': bandIndex, 'bandwidth': value},
+      ),
+    );
+  }
+
+  @override
+  Future<void> setFrequency(
+    String playerId,
+    int bandIndex,
+    double value,
+  ) async {
+    calls.add(
+      FakeCall(
+        id: playerId,
+        method: 'setFrequency',
+        value: <String, dynamic>{'bandIndex': bandIndex, 'frequency': value},
+      ),
+    );
+  }
+
+  @override
   Future<void> setBalance(String playerId, double balance) async {
     calls.add(FakeCall(id: playerId, method: 'setBalance', value: balance));
   }
