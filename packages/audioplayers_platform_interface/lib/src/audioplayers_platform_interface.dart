@@ -64,17 +64,17 @@ abstract class MethodChannelAudioplayersPlatformInterface {
   /// Moves the cursor to the desired position.
   Future<void> seek(String playerId, Duration position);
 
-  /// Sets the EQ gain.
-  /// Value range: [-24.0, 12.0]
-  Future<void> setGain(String playerId, int bandIndex, double value);
+  Future<int?> getEqNumberOfBands(String playerId);
 
-  /// Sets the EQ bandwidth.
-  /// Value range: [0.0, 20_000.0]
-  Future<void> setBandwidth(String playerId, int bandIndex, double value);
+  Future<Map?> getEqLimits(String playerId);
 
-  /// Sets the EQ frequency.
-  /// Value range: [20.0, 20_000.0]
-  Future<void> setFrequency(String playerId, int bandIndex, double value);
+  Future<Map?> getEqBand(String playerId, int bandIndex);
+
+  Future<void> setEqBand(
+    String playerId,
+    int bandIndex,
+    Map<String, double> band,
+  );
 
   /// Sets the stereo balance.
   ///

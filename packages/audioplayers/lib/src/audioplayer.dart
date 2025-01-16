@@ -39,13 +39,8 @@ class AudioPlayer {
 
   double get volume => _volume;
 
-  static const int eqNumBands = 10;
-
-  final List<double> _gains = List.generate(eqNumBands, (_) => 0.0);
-
-  final List<double> _bandwidths = List.generate(eqNumBands, (_) => 0.0);
-
-  final List<double> _frequencies = List.generate(eqNumBands, (_) => 20.0);
+  int eqNumBands = 0;
+  Map eqLimits = {};
 
   double _balance = 0.0;
 
@@ -187,6 +182,9 @@ class AudioPlayer {
             onError: _eventStreamController.addError,
           );
       creatingCompleter.complete();
+
+      eqNumBands = await _getEqNumberOfBands() ?? 0;
+      eqLimits = await _getEqLimits() ?? {};
     } on Exception catch (e, stackTrace) {
       creatingCompleter.completeError(e, stackTrace);
     }
@@ -307,55 +305,24 @@ class AudioPlayer {
     await _positionUpdater?.update();
   }
 
-  /// Gets the EQ gain by band index.
-  double getGain(int bandIndex) {
-    return _gains[bandIndex];
-  }
-
-  /// Gets the EQ bandwidth by band index.
-  double getBandwidth(int bandIndex) {
-    return _bandwidths[bandIndex];
-  }
-
-  /// Gets the EQ frequency by band index.
-  double getFrequency(int bandIndex) {
-    return _frequencies[bandIndex];
-  }
-
-  /// Sets the EQ gain.
-  /// Value range: [-24.0, 12.0]
-  Future<void> setGain(int bandIndex, double value) async {
-    assert(
-      -24.0 <= value && value <= 12.0,
-      'Gain is not in range [-24.0, 12.0]: $value',
-    );
-    _gains[bandIndex] = value;
+  Future<int?> _getEqNumberOfBands() async {
     await creatingCompleter.future;
-    return _platform.setGain(playerId, bandIndex, value);
+    return _platform.getEqNumberOfBands(playerId);
   }
 
-  /// Sets the EQ bandwidth.
-  /// Value range: [0.0, 20_000.0]
-  Future<void> setBandwidth(int bandIndex, double value) async {
-    assert(
-      0.0 <= value && value <= 20000.0,
-      'Bandwidth is not in range [0.0, 20_000.0]: $value',
-    );
-    _bandwidths[bandIndex] = value;
+  Future<Map?> _getEqLimits() async {
     await creatingCompleter.future;
-    return _platform.setBandwidth(playerId, bandIndex, value);
+    return _platform.getEqLimits(playerId);
   }
 
-  /// Sets the EQ frequency.
-  /// Value range: [20.0, 20_000.0]
-  Future<void> setFrequency(int bandIndex, double value) async {
-    assert(
-      20.0 <= value && value <= 20000.0,
-      'Frequency is not in range [20.0, 20_000.0]: $value',
-    );
-    _frequencies[bandIndex] = value;
+  Future<Map?> getEqBand(int bandIndex) async {
     await creatingCompleter.future;
-    return _platform.setFrequency(playerId, bandIndex, value);
+    return _platform.getEqBand(playerId, bandIndex);
+  }
+
+  Future<void> setEqBand(int bandIndex, Map<String, double> band) async {
+    await creatingCompleter.future;
+    return _platform.setEqBand(playerId, bandIndex, band);
   }
 
   /// Sets the stereo balance.

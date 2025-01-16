@@ -14,6 +14,11 @@ interface Player {
     fun seekTo(position: Int)
     fun release()
 
+    fun getEqNumberOfBands(): Short
+    fun getEqLimits(): Map<String, List<Float>>
+    fun getEqBand(bandIndex: Short): Map<String, Float>
+    fun setEqBand(bandIndex: Short, band: Map<String, Float>)
+
     fun setVolume(leftVolume: Float, rightVolume: Float)
     fun setRate(rate: Float)
     fun setLooping(looping: Boolean)

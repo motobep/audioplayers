@@ -1,15 +1,27 @@
 package xyz.luan.audioplayers.player
 
 import android.media.MediaPlayer
+import android.media.audiofx.Equalizer
 import android.os.Build
 import android.os.PowerManager
 import xyz.luan.audioplayers.AudioContextAndroid
 import xyz.luan.audioplayers.source.Source
 
-class MediaPlayerPlayer(
-    private val wrappedPlayer: WrappedPlayer,
-) : Player {
-    private val mediaPlayer = createMediaPlayer(wrappedPlayer)
+class MediaPlayerPlayer: Player {
+    private val wrappedPlayer: WrappedPlayer
+    private val mediaPlayer: MediaPlayer
+    private var equalizer: Equalizer
+
+    public constructor(wrappedPlayer: WrappedPlayer) {
+         println("MediaPlayerPlayer constructor")
+        this.wrappedPlayer = wrappedPlayer
+        this.mediaPlayer = createMediaPlayer(wrappedPlayer)
+        val audioSessionId = this.mediaPlayer.getAudioSessionId()
+        // val audioSessionId = 0
+         println("EQ id $audioSessionId")
+        this.equalizer = Equalizer(100, audioSessionId)
+        // this.equalizer.usePreset(7)
+    }
 
     private fun createMediaPlayer(wrappedPlayer: WrappedPlayer): MediaPlayer {
         val mediaPlayer = MediaPlayer().apply {
@@ -31,6 +43,69 @@ class MediaPlayerPlayer(
     override fun getCurrentPosition(): Int {
         return mediaPlayer.currentPosition
     }
+
+    override fun getEqNumberOfBands(): Short {
+        return equalizer.getNumberOfBands()
+    }
+
+    override fun getEqLimits(): Map<String, List<Float>> {
+        val range = equalizer.getBandLevelRange().map { it / 100.0f } // milli -> dB
+
+        return mapOf(
+            "gain" to range,
+            "bandwidth" to listOf(-1.0f, -1.0f),
+            "frequency" to listOf(-1.0f, -1.0f),
+        )
+    }
+
+    override fun getEqBand(bandIndex: Short): Map<String, Float> {
+        val gainMilliB = equalizer.getBandLevel(bandIndex) // milli Bel
+        println("gainMilliB=${gainMilliB}")
+        val gain: Float = gainMilliB / 100.0f // dB
+
+        val freqRange = equalizer.getBandFreqRange(bandIndex)
+        println("freqRange=${freqRange.joinToString()}")
+        val bandwidth: Float = (freqRange[1] - freqRange[0]) / 1000.0f // Hz
+
+        val freqMilliHz = equalizer.getCenterFreq(bandIndex) // milli Hz
+        val freq: Float = freqMilliHz / 1000.0f // Hz
+        println("center freq=${freq}")
+
+        return mapOf("gain" to gain, "bandwidth" to bandwidth, "frequency" to freq)
+    }
+
+    override fun setEqBand(bandIndex: Short, band: Map<String, Float>) {
+        val audioSessionId = this.mediaPlayer.getAudioSessionId()
+        //  println("id $audioSessionId")
+        // this.equalizer = Equalizer(0, audioSessionId)
+
+        val gainMilliB: Short = (band["gain"]!!.toInt() * 100).toShort()
+        println("set gainMilliB=${gainMilliB}")
+        equalizer.setBandLevel(bandIndex, gainMilliB)
+    }
+
+    // override fun setGain(band: Short, level: Short) {
+    //     println("MediaPlayerPlayer.setGain")
+    //
+    //     val levelRange = equalizer.getBandLevelRange()
+    //     println("levelRange=${levelRange}")
+    //
+    //     val bands = equalizer.getNumberOfBands()
+    //     println("bunds num=$bands")
+    //
+    //     for(i in 0 until bands) {
+    //         val freqRange = equalizer.getBandFreqRange(i.toShort())
+    //         println("freqRange=${freqRange.joinToString()}")
+    //     }
+    //
+    //     val props = equalizer.getProperties()
+    //     println("Props: $props")
+    //
+    //     val presetsN =  equalizer.getNumberOfPresets()
+    //     for(i in 0 until presetsN) {
+    //         println("$i: ${equalizer.getPresetName(i.toShort())}")
+    //     }
+    // }
 
     override fun setVolume(leftVolume: Float, rightVolume: Float) {
         mediaPlayer.setVolume(leftVolume, rightVolume)

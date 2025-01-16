@@ -90,41 +90,50 @@ mixin MethodChannelAudioplayersPlatform
   }
 
   @override
-  Future<void> setGain(
+  Future<int?> getEqNumberOfBands(
     String playerId,
-    int bandIndex,
-    double value,
-  ) {
-    return _call(
-      'setGain',
+  ) async {
+    return _compute<int>(
+      'getEqNumberOfBands',
       playerId,
-      <String, dynamic>{'bandIndex': bandIndex, 'gain': value},
+      <String, dynamic>{},
     );
   }
 
   @override
-  Future<void> setBandwidth(
-    String playerId,
-    int bandIndex,
-    double value,
-  ) {
-    return _call(
-      'setBandwidth',
+  Future<Map?> getEqLimits(String playerId) async {
+    final v = await _compute<Map>(
+      'getEqLimits',
       playerId,
-      <String, dynamic>{'bandIndex': bandIndex, 'bandwidth': value},
+      <String, dynamic>{},
+    );
+    return v;
+  }
+
+  @override
+  Future<Map?> getEqBand(String playerId, int bandIndex) {
+    return _compute<Map>(
+      'getEqBand',
+      playerId,
+      <String, dynamic>{
+        'bandIndex': bandIndex,
+      },
     );
   }
 
   @override
-  Future<void> setFrequency(
+  Future<void> setEqBand(
     String playerId,
     int bandIndex,
-    double value,
+    Map<String, double> band,
   ) {
     return _call(
-      'setFrequency',
+      'setEqBand',
       playerId,
-      <String, dynamic>{'bandIndex': bandIndex, 'frequency': value},
+      <String, dynamic>{
+        'bandIndex': bandIndex,
+        'band': band,
+      },
     );
   }
 

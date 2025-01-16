@@ -122,7 +122,8 @@ class WrappedPlayer internal constructor(
         return runCatching { player?.getCurrentPosition().takeUnless { it == 0 } }.getOrNull() ?: -1
     }
 
-    private fun getOrCreatePlayer(): Player {
+    public fun getOrCreatePlayer(): Player {
+         println("getOrCreatePlayer()")
         val currentPlayer = player
         return if (released || currentPlayer == null) {
             createPlayer().also {
@@ -187,6 +188,28 @@ class WrappedPlayer internal constructor(
 
     val audioManager: AudioManager
         get() = ref.getAudioManager()
+
+    fun getEqNumberOfBands(): Short? {
+        println("getNumberOfBands WrappedPlayer")
+        return player?.getEqNumberOfBands()
+    }
+
+    fun getEqLimits(): Map<String, List<Float>>? {
+        println("WrappedPlayer")
+        return player?.getEqLimits()
+    }
+
+    fun getEqBand(bandIndex: Short): Map<String, Float>? {
+        println("WrappedPlayer")
+        return player?.getEqBand(bandIndex)
+    }
+
+    // Setter functions
+    
+    fun setEqBand(bandIndex: Short, band: Map<String, Float>) {
+        println("WrappedPlayer")
+        player?.setEqBand(bandIndex, band)
+    }
 
     /**
      * Playback handling methods
@@ -356,6 +379,7 @@ class WrappedPlayer internal constructor(
      * Create new player
      */
     private fun createPlayer(): Player {
+     println("createPlayer()")
         return when (playerMode) {
             MEDIA_PLAYER -> MediaPlayerPlayer(this)
             LOW_LATENCY -> SoundPoolPlayer(this, soundPoolManager)
@@ -366,6 +390,7 @@ class WrappedPlayer internal constructor(
      * Create new player, assign and configure source
      */
     private fun initPlayer() {
+     println("initPlayer()")
         val player = createPlayer()
         // Need to set player before calling prepare, as onPrepared may is called before player is assigned
         this.player = player

@@ -11,7 +11,7 @@ import 'package:audioplayers_example/tabs/streams.dart';
 import 'package:audioplayers_example/utils.dart';
 import 'package:flutter/material.dart';
 
-const defaultPlayerCount = 4;
+const defaultPlayerCount = 1;
 
 typedef OnError = void Function(Exception exception);
 

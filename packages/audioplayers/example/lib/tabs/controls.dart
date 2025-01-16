@@ -55,21 +55,25 @@ class _ControlsTabState extends State<ControlsTab>
   Widget build(BuildContext context) {
     super.build(context);
 
-    final eqChildren = Platform.isLinux
+    print('limits=${widget.player.eqLimits}');
+    final band0 = widget.player.getEqBand(0);
+    print('band0=$band0');
+
+    final eqChildren = Platform.isLinux || true
         ? [
-            const Padding(
-              padding: EdgeInsets.only(bottom: 8.0),
-              child: Text('${AudioPlayer.eqNumBands} band EQ'),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8.0),
+              child: Text('${widget.player.eqNumBands} band EQ'),
             ),
-            ...(List.generate(AudioPlayer.eqNumBands, (i) => i).map(
+            ...(List.generate(widget.player.eqNumBands, (i) => i).map(
               (i) {
                 const gain = 0.0;
-                final freq = 32.0 * pow(2, i);
-                final bw = _caldBandwidth(freq, 1.5);
+                // final freq = 32.0 * pow(2, i);
+                // final bw = _caldBandwidth(freq, 1.5);
 
-                widget.player.setGain(i, gain);
-                widget.player.setBandwidth(i, bw);
-                widget.player.setFrequency(i, freq);
+                // widget.player.setGain(i, gain);
+                // widget.player.setBandwidth(i, bw);
+                // widget.player.setFrequency(i, freq);
 
                 return Column(
                   children: [
@@ -85,34 +89,12 @@ class _ControlsTabState extends State<ControlsTab>
                       child: _EqSlider(
                         name: 'Gain',
                         value: gain,
-                        min: -24.0,
-                        max: 12.0,
-                        onChangeEnd: (value) {
-                          widget.player.setGain(i, value);
-                        },
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8.0),
-                      child: _EqSlider(
-                        name: 'Bandwidth',
-                        value: bw,
-                        min: 0.0,
-                        max: 20000.0,
-                        onChangeEnd: (value) {
-                          widget.player.setBandwidth(i, value);
-                        },
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8.0, bottom: 32.0),
-                      child: _EqSlider(
-                        name: 'Frequency Hz',
-                        value: freq,
-                        min: 20.0,
-                        max: 20000.0,
-                        onChangeEnd: (value) {
-                          widget.player.setFrequency(i, value);
+                        min: widget.player.eqLimits['gain'][0] as double,
+                        max: widget.player.eqLimits['gain'][1] as double,
+                        onChangeEnd: (value) async {
+                          widget.player.setEqBand(i, {'gain': value});
+                          final band = await widget.player.getEqBand(i);
+                          print('band $i=$band');
                         },
                       ),
                     ),

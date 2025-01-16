@@ -138,6 +138,22 @@ class SoundPoolPlayer(
             field = value
         }
 
+    override fun getEqNumberOfBands(): Short {
+        throw NotImplementedError("getNumberOfBands")
+    }
+
+    override fun getEqLimits(): Map<String, List<Float>> {
+        throw NotImplementedError("getEqLimits")
+    }
+
+    override fun getEqBand(bandIndex: Short): Map<String, Float> {
+        throw NotImplementedError("getEqBand")
+    }
+
+    override fun setEqBand(bandIndex: Short, band: Map<String, Float>) {
+        throw NotImplementedError("setEqBand")
+    }
+
     override fun setVolume(leftVolume: Float, rightVolume: Float) {
         streamId?.let { soundPool.setVolume(it, leftVolume, rightVolume) }
     }
