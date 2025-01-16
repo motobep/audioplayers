@@ -40,6 +40,7 @@ class AudioPlayer {
   double get volume => _volume;
 
   int eqNumBands = 0;
+
   Map eqLimits = {};
 
   double _balance = 0.0;
@@ -183,6 +184,7 @@ class AudioPlayer {
           );
       creatingCompleter.complete();
 
+      // After player init actions
       eqNumBands = await _getEqNumberOfBands() ?? 0;
       eqLimits = await _getEqLimits() ?? {};
     } on Exception catch (e, stackTrace) {

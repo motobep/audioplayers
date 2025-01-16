@@ -1,5 +1,4 @@
 import 'dart:io' show Platform;
-import 'dart:math' show pow;
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:audioplayers_example/components/btn.dart';
@@ -55,11 +54,7 @@ class _ControlsTabState extends State<ControlsTab>
   Widget build(BuildContext context) {
     super.build(context);
 
-    print('limits=${widget.player.eqLimits}');
-    final band0 = widget.player.getEqBand(0);
-    print('band0=$band0');
-
-    final eqChildren = Platform.isLinux || true
+    final eqChildren = Platform.isLinux || Platform.isAndroid
         ? [
             Padding(
               padding: const EdgeInsets.only(bottom: 8.0),
@@ -68,12 +63,6 @@ class _ControlsTabState extends State<ControlsTab>
             ...(List.generate(widget.player.eqNumBands, (i) => i).map(
               (i) {
                 const gain = 0.0;
-                // final freq = 32.0 * pow(2, i);
-                // final bw = _caldBandwidth(freq, 1.5);
-
-                // widget.player.setGain(i, gain);
-                // widget.player.setBandwidth(i, bw);
-                // widget.player.setFrequency(i, freq);
 
                 return Column(
                   children: [
@@ -93,8 +82,6 @@ class _ControlsTabState extends State<ControlsTab>
                         max: widget.player.eqLimits['gain'][1] as double,
                         onChangeEnd: (value) async {
                           widget.player.setEqBand(i, {'gain': value});
-                          final band = await widget.player.getEqBand(i);
-                          print('band $i=$band');
                         },
                       ),
                     ),
@@ -237,11 +224,6 @@ class _ControlsTabState extends State<ControlsTab>
 
   @override
   bool get wantKeepAlive => true;
-}
-
-/// bandwidth = (center frequency) / (Q factor)
-double _caldBandwidth(double centerFreq, double qFactor) {
-  return centerFreq / qFactor;
 }
 
 class _EqSlider extends StatefulWidget {

@@ -94,7 +94,6 @@ class AudioplayersPlugin : FlutterPlugin {
         if (call.method == "create") {
             val eventHandler = EventHandler(EventChannel(binaryMessenger, "xyz.luan/audioplayers/events/$playerId"))
             players[playerId] = WrappedPlayer(this, eventHandler, defaultAudioContext.copy(), soundPoolManager)
-         println("methodHandler getOrCreatePlayer()")
             players[playerId]!!.getOrCreatePlayer()
             response.success(1)
             return
@@ -141,9 +140,7 @@ class AudioplayersPlugin : FlutterPlugin {
                 }
 
                 "getEqNumberOfBands" -> {
-                    println("getEqNumberOfBands plugin")
-                    val numBands = player.getEqNumberOfBands()
-                    response.success(numBands)
+                    response.success(player.getEqNumberOfBands())
                     return
                 }
 
@@ -160,7 +157,6 @@ class AudioplayersPlugin : FlutterPlugin {
 
                 "setEqBand" -> {
                     val bandIndex = call.argument<Int>("bandIndex")?.toShort() ?: error("bandIndex is required")
-                    println("bandIndex: ${bandIndex}")
                     val band = call.argument<Map<String, Float>>("band") ?: error("band is required")
                     player.setEqBand(bandIndex, band)
                 }
