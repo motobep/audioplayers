@@ -98,42 +98,42 @@ class FakeAudioplayersPlatform extends AudioplayersPlatformInterface {
   }
 
   @override
-  Future<void> setGain(String playerId, int bandIndex, double value) async {
-    calls.add(
-      FakeCall(
-        id: playerId,
-        method: 'setGain',
-        value: <String, dynamic>{'bandIndex': bandIndex, 'gain': value},
-      ),
-    );
+  Future<int?> getEqNumberOfBands(
+    String playerId,
+  ) async {
+    calls.add(FakeCall(id: playerId, method: 'getEqNumberOfBands'));
+    return 0;
   }
 
   @override
-  Future<void> setBandwidth(
+  Future<Map?> getEqLimits(String playerId) async {
+    calls.add(FakeCall(id: playerId, method: 'getEqLimits'));
+    return {};
+  }
+
+  @override
+  Future<Map?> getEqBand(String playerId, int bandIndex) async {
+    calls.add(
+      FakeCall(
+        id: playerId,
+        method: 'getEqBand',
+        value: <String, dynamic>{'bandIndex': bandIndex},
+      ),
+    );
+    return {};
+  }
+
+  @override
+  Future<void> setEqBand(
     String playerId,
     int bandIndex,
-    double value,
+    Map<String, double> band,
   ) async {
     calls.add(
       FakeCall(
         id: playerId,
-        method: 'setBandwidth',
-        value: <String, dynamic>{'bandIndex': bandIndex, 'bandwidth': value},
-      ),
-    );
-  }
-
-  @override
-  Future<void> setFrequency(
-    String playerId,
-    int bandIndex,
-    double value,
-  ) async {
-    calls.add(
-      FakeCall(
-        id: playerId,
-        method: 'setFrequency',
-        value: <String, dynamic>{'bandIndex': bandIndex, 'frequency': value},
+        method: 'setEqBand',
+        value: <String, dynamic>{'bandIndex': bandIndex, 'band': band},
       ),
     );
   }

@@ -101,13 +101,12 @@ mixin MethodChannelAudioplayersPlatform
   }
 
   @override
-  Future<Map?> getEqLimits(String playerId) async {
-    final v = await _compute<Map>(
+  Future<Map?> getEqLimits(String playerId) {
+    return _compute<Map>(
       'getEqLimits',
       playerId,
       <String, dynamic>{},
     );
-    return v;
   }
 
   @override

@@ -63,6 +63,7 @@ class _ControlsTabState extends State<ControlsTab>
             ...(List.generate(widget.player.eqNumBands, (i) => i).map(
               (i) {
                 const gain = 0.0;
+                final gainLimits = widget.player.eqLimits['gain'] as List;
 
                 return Column(
                   children: [
@@ -78,8 +79,8 @@ class _ControlsTabState extends State<ControlsTab>
                       child: _EqSlider(
                         name: 'Gain',
                         value: gain,
-                        min: widget.player.eqLimits['gain'][0] as double,
-                        max: widget.player.eqLimits['gain'][1] as double,
+                        min: gainLimits[0] as double,
+                        max: gainLimits[1] as double,
                         onChangeEnd: (value) async {
                           widget.player.setEqBand(i, {'gain': value});
                         },

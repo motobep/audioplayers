@@ -131,34 +131,40 @@ class WebAudioplayersPlatform extends AudioplayersPlatformInterface {
   }
 
   @override
-  Future<void> setGain(String playerId, int bandIndex, double value) async {
+  Future<int?> getEqNumberOfBands(
+    String playerId,
+  ) async {
     throw PlatformException(
       code: 'WebAudioError',
-      message: 'setGain() not implemented',
+      message: 'getEqNumberOfBands() not implemented',
     );
   }
 
   @override
-  Future<void> setBandwidth(
-    String playerId,
-    int bandIndex,
-    double value,
-  ) async {
+  Future<Map?> getEqLimits(String playerId) {
     throw PlatformException(
       code: 'WebAudioError',
-      message: 'setBandwidth() not implemented',
+      message: 'getEqLimits() not implemented',
     );
   }
 
   @override
-  Future<void> setFrequency(
-    String playerId,
-    int bandIndex,
-    double value,
-  ) async {
+  Future<Map?> getEqBand(String playerId, int bandIndex) {
     throw PlatformException(
       code: 'WebAudioError',
-      message: 'setFrequency() not implemented',
+      message: 'getEqBand() not implemented',
+    );
+  }
+
+  @override
+  Future<void> setEqBand(
+    String playerId,
+    int bandIndex,
+    Map<String, double> band,
+  ) {
+    throw PlatformException(
+      code: 'WebAudioError',
+      message: 'setEqBand() not implemented',
     );
   }
 
