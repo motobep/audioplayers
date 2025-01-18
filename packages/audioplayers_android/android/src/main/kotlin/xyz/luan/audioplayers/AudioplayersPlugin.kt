@@ -139,23 +139,33 @@ class AudioplayersPlugin : FlutterPlugin {
                     player.volume = volume.toFloat()
                 }
 
-                "getEqNumberOfBands" -> {
+                "equalizer.getEnabled" -> {
+                    response.success(player.getEqEnabled())
+                    return
+                }
+
+                "equalizer.setEnabled" -> {
+                    val isEnabled = call.argument<Boolean>("isEnabled") ?: error("isEnabled is required")
+                    player.setEqEnabled(isEnabled)
+                }
+
+                "equalizer.getNumberOfBands" -> {
                     response.success(player.getEqNumberOfBands())
                     return
                 }
 
-                "getEqLimits" -> {
+                "equalizer.getLimits" -> {
                     response.success(player.getEqLimits())
                     return
                 }
 
-                "getEqBand" -> {
+                "equalizer.getBand" -> {
                     val bandIndex = call.argument<Int>("bandIndex")?.toShort() ?: error("bandIndex is required")
                     response.success(player.getEqBand(bandIndex))
                     return
                 }
 
-                "setEqBand" -> {
+                "equalizer.setBand" -> {
                     val bandIndex = call.argument<Int>("bandIndex")?.toShort() ?: error("bandIndex is required")
                     val band = call.argument<Map<String, Float>>("band") ?: error("band is required")
                     player.setEqBand(bandIndex, band)

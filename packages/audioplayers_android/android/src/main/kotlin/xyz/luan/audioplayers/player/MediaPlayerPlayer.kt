@@ -18,7 +18,6 @@ class MediaPlayerPlayer: Player {
 
         val audioSessionId = this.mediaPlayer.getAudioSessionId()
         this.equalizer = Equalizer(0, audioSessionId)
-        this.equalizer.setEnabled(true)
     }
 
     private fun createMediaPlayer(wrappedPlayer: WrappedPlayer): MediaPlayer {
@@ -40,6 +39,17 @@ class MediaPlayerPlayer: Player {
 
     override fun getCurrentPosition(): Int {
         return mediaPlayer.currentPosition
+    }
+
+    /**
+     * Equalizer methods
+     */
+    override fun getEqEnabled(): Boolean {
+        return this.equalizer.getEnabled()
+    }
+
+    override fun setEqEnabled(isEnabled: Boolean) {
+        this.equalizer.setEnabled(isEnabled)
     }
 
     override fun getEqNumberOfBands(): Short {
@@ -76,6 +86,9 @@ class MediaPlayerPlayer: Player {
     override fun setVolume(leftVolume: Float, rightVolume: Float) {
         mediaPlayer.setVolume(leftVolume, rightVolume)
     }
+    /**
+     * End Equalizer methods
+     */
 
     override fun setRate(rate: Float) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {

@@ -54,45 +54,6 @@ class _ControlsTabState extends State<ControlsTab>
   Widget build(BuildContext context) {
     super.build(context);
 
-    final eqChildren = Platform.isLinux || Platform.isAndroid
-        ? [
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8.0),
-              child: Text('${widget.player.eqNumBands} band EQ'),
-            ),
-            ...(List.generate(widget.player.eqNumBands, (i) => i).map(
-              (i) {
-                const gain = 0.0;
-                final gainLimits = widget.player.eqLimits['gain'] as List;
-
-                return Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 10.0),
-                      child: Text(
-                        '№ $i band',
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8.0),
-                      child: _EqSlider(
-                        name: 'Gain',
-                        value: gain,
-                        min: gainLimits[0] as double,
-                        max: gainLimits[1] as double,
-                        onChangeEnd: (value) async {
-                          widget.player.setEqBand(i, {'gain': value});
-                        },
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ).toList()),
-          ]
-        : [const SizedBox.shrink()];
-
     return TabContent(
       children: [
         WrappedListTile(
@@ -218,13 +179,138 @@ class _ControlsTabState extends State<ControlsTab>
             ),
           ],
         ),
-        ...eqChildren,
+        _Equalizer(player: widget.player),
       ],
     );
   }
 
   @override
   bool get wantKeepAlive => true;
+}
+
+class _Equalizer extends StatelessWidget {
+  final AudioPlayer player;
+
+  const _Equalizer({
+    required this.player,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (!Platform.isLinux && !Platform.isAndroid) {
+      return const SizedBox.shrink();
+    }
+
+    return FutureBuilder<Map<String, dynamic>>(
+      future: () async {
+        final numBands = (await player.equalizer.getNumberOfBands())!;
+        final limits = await player.equalizer.getLimits();
+
+        final bands = [];
+        for (var i = 0; i < numBands; i++) {
+          final el = (await player.equalizer.getBand(i))!;
+          bands.add(el);
+        }
+        return {
+          'numBands': numBands,
+          'limits': limits,
+          'bands': bands,
+        };
+      }(),
+      builder: (context, AsyncSnapshot<Map<String, dynamic>> snapshot) {
+        if (!snapshot.hasData) {
+          return const Text('Equalizer...');
+        }
+        if (snapshot.hasError) {
+          return const Text('Equalizer widget errored');
+        }
+        final numBands = snapshot.data!['numBands'] as int;
+        final limits = snapshot.data!['limits'] as Map;
+        final bands = snapshot.data!['bands'] as List;
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8.0),
+              child: Text('$numBands band EQ'),
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text('isEnabled'),
+                _Checkbox(
+                  callback: (isChecked) {
+                    player.equalizer.setEnabled(isChecked);
+                  },
+                ),
+              ],
+            ),
+            ...(List.generate(numBands, (i) => i).map(
+              (i) {
+                final band = bands[i] as Map;
+                final gain = band['gain'] as double;
+                final bw = band['bandwidth'] as double;
+                final freq = band['frequency'] as double;
+                final gainLimits = limits['gain'] as List;
+                final bandwidthLimits = limits['bandwidth'] as List;
+                final frequencyLimits = limits['frequency'] as List;
+
+                return Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10.0),
+                      child: Text(
+                        '№ $i band',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    if (gainLimits.length == 2)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: _EqSlider(
+                          name: 'Gain',
+                          value: gain,
+                          min: gainLimits[0] as double,
+                          max: gainLimits[1] as double,
+                          onChangeEnd: (value) async {
+                            player.equalizer.setBand(i, {'gain': value});
+                          },
+                        ),
+                      ),
+                    if (bandwidthLimits.length == 2)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: _EqSlider(
+                          name: 'bandwidth',
+                          value: bw,
+                          min: bandwidthLimits[0] as double,
+                          max: bandwidthLimits[1] as double,
+                          onChangeEnd: (value) async {
+                            player.equalizer.setBand(i, {'bandwidth': value});
+                          },
+                        ),
+                      ),
+                    if (frequencyLimits.length == 2)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: _EqSlider(
+                          name: 'frequency',
+                          value: freq,
+                          min: frequencyLimits[0] as double,
+                          max: frequencyLimits[1] as double,
+                          onChangeEnd: (value) async {
+                            player.equalizer.setBand(i, {'frequency': value});
+                          },
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ).toList()),
+          ],
+        );
+      },
+    );
+  }
 }
 
 class _EqSlider extends StatefulWidget {
@@ -287,6 +373,32 @@ class _EqSliderState extends State<_EqSlider> {
           },
         ),
       ],
+    );
+  }
+}
+
+class _Checkbox extends StatefulWidget {
+  // ignore: avoid_positional_boolean_parameters
+  final void Function(bool value) callback;
+  const _Checkbox({required this.callback});
+
+  @override
+  State<_Checkbox> createState() => _CheckboxState();
+}
+
+class _CheckboxState extends State<_Checkbox> {
+  bool isChecked = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Checkbox(
+      value: isChecked,
+      onChanged: (bool? value) {
+        setState(() {
+          isChecked = value!;
+          widget.callback(isChecked);
+        });
+      },
     );
   }
 }

@@ -58,6 +58,16 @@ AudioPlayer::AudioPlayer(std::string playerId,
       SetBandwidth(i, 0.0);
       SetFrequency(i, 20.0);
     }
+
+    // Set limits
+    const double gainLimits[] = {-24.0, 12.0};
+    const double bandwidthLimits[] = {0.0, 20000.0};
+    const double frequencyLimits[] = {20.0, 20000.0};
+    fl_value_set_string(_limitsMap, "gain", fl_value_new_float_list(gainLimits, 2));
+    fl_value_set_string(_limitsMap, "bandwidth",
+                        fl_value_new_float_list(bandwidthLimits, 2));
+    fl_value_set_string(_limitsMap, "frequency",
+                        fl_value_new_float_list(frequencyLimits, 2));
   }
 
   // Setup source options
@@ -288,6 +298,57 @@ void AudioPlayer::OnLog(const gchar* message) {
     fl_value_set_string(map, "value", fl_value_new_string(message));
 
     fl_event_channel_send(this->_eventChannel, map, nullptr, nullptr);
+  }
+}
+
+bool AudioPlayer::GetEnabled() {
+  return true;
+}
+
+void AudioPlayer::SetEnabled(bool isEnabled) {
+  // not implemented
+}
+
+int AudioPlayer::GetNumberOfBands() {
+  return __AUDIO_PLAYER_NUM_BUNDS;
+}
+
+FlValue* AudioPlayer::GetLimits() {
+  return _limitsMap;
+}
+
+FlValue* AudioPlayer::GetBand(int bandIndex) {
+  gdouble gain;
+  gdouble bandwidth;
+  gdouble freq;
+  g_object_get(AudioPlayer::eqBands[bandIndex], "gain", &gain, NULL);
+  g_object_get(AudioPlayer::eqBands[bandIndex], "bandwidth", &bandwidth, NULL);
+  g_object_get(AudioPlayer::eqBands[bandIndex], "freq", &freq, NULL);
+
+  fl_value_set_string(_bandMap, "gain", fl_value_new_float(gain));
+  fl_value_set_string(_bandMap, "bandwidth", fl_value_new_float(bandwidth));
+  fl_value_set_string(_bandMap, "frequency", fl_value_new_float(freq));
+
+  return _bandMap;
+}
+
+void AudioPlayer::SetBand(int bandIndex, FlValue* band) {
+  auto flGain = fl_value_lookup_string(band, "gain");
+  if (flGain != nullptr) {
+    double gain = fl_value_get_float(flGain);
+    SetGain(bandIndex, gain);
+  }
+
+  auto flBandwidth = fl_value_lookup_string(band, "bandwidth");
+  if (flBandwidth != nullptr) {
+    double value = fl_value_get_float(flBandwidth);
+    SetBandwidth(bandIndex, value);
+  }
+
+  auto flFrequency = fl_value_lookup_string(band, "frequency");
+  if (flFrequency != nullptr) {
+    double value = fl_value_get_float(flFrequency);
+    SetFrequency(bandIndex, value);
   }
 }
 

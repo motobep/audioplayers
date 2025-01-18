@@ -138,6 +138,14 @@ class SoundPoolPlayer(
             field = value
         }
 
+    override fun getEqEnabled(): Boolean {
+        throw NotImplementedError("getEqEnabled")
+    }
+
+    override fun setEqEnabled(isEnabled: Boolean) {
+        throw NotImplementedError("setEqEnabled")
+    }
+
     override fun getEqNumberOfBands(): Short {
         throw NotImplementedError("getNumberOfBands")
     }

@@ -39,9 +39,7 @@ class AudioPlayer {
 
   double get volume => _volume;
 
-  int eqNumBands = 0;
-
-  Map eqLimits = {};
+  late Equalizer equalizer;
 
   double _balance = 0.0;
 
@@ -184,9 +182,8 @@ class AudioPlayer {
           );
       creatingCompleter.complete();
 
-      // After player init actions
-      eqNumBands = await _getEqNumberOfBands() ?? 0;
-      eqLimits = await _getEqLimits() ?? {};
+      // After player init
+      equalizer = Equalizer(playerId);
     } on Exception catch (e, stackTrace) {
       creatingCompleter.completeError(e, stackTrace);
     }
@@ -305,26 +302,6 @@ class AudioPlayer {
     await Future.wait([futureSeek, futureSeekComplete]);
 
     await _positionUpdater?.update();
-  }
-
-  Future<int?> _getEqNumberOfBands() async {
-    await creatingCompleter.future;
-    return _platform.getEqNumberOfBands(playerId);
-  }
-
-  Future<Map?> _getEqLimits() async {
-    await creatingCompleter.future;
-    return _platform.getEqLimits(playerId);
-  }
-
-  Future<Map?> getEqBand(int bandIndex) async {
-    await creatingCompleter.future;
-    return _platform.getEqBand(playerId, bandIndex);
-  }
-
-  Future<void> setEqBand(int bandIndex, Map<String, double> band) async {
-    await creatingCompleter.future;
-    return _platform.setEqBand(playerId, bandIndex, band);
   }
 
   /// Sets the stereo balance.
@@ -537,5 +514,37 @@ class AudioPlayer {
 
     // Needs to be called after cancelling event stream subscription:
     await _platform.dispose(playerId);
+  }
+}
+
+class Equalizer {
+  final _platform = AudioplayersPlatformInterface.instance;
+  final String playerId;
+
+  Equalizer(this.playerId);
+
+  Future<bool?> getEnabled() {
+    return _platform.equalizer.getEnabled(playerId);
+  }
+
+  // ignore: avoid_positional_boolean_parameters
+  Future<void> setEnabled(bool isEnabled) {
+    return _platform.equalizer.setEnabled(playerId, isEnabled);
+  }
+
+  Future<int?> getNumberOfBands() {
+    return _platform.equalizer.getNumberOfBands(playerId);
+  }
+
+  Future<Map?> getLimits() {
+    return _platform.equalizer.getLimits(playerId);
+  }
+
+  Future<Map?> getBand(int bandIndex) {
+    return _platform.equalizer.getBand(playerId, bandIndex);
+  }
+
+  Future<void> setBand(int bandIndex, Map<String, double> band) {
+    return _platform.equalizer.setBand(playerId, bandIndex, band);
   }
 }

@@ -130,43 +130,9 @@ class WebAudioplayersPlatform extends AudioplayersPlatformInterface {
     getPlayer(playerId).volume = volume;
   }
 
+  /// No implemetation
   @override
-  Future<int?> getEqNumberOfBands(
-    String playerId,
-  ) async {
-    throw PlatformException(
-      code: 'WebAudioError',
-      message: 'getEqNumberOfBands() not implemented',
-    );
-  }
-
-  @override
-  Future<Map?> getEqLimits(String playerId) {
-    throw PlatformException(
-      code: 'WebAudioError',
-      message: 'getEqLimits() not implemented',
-    );
-  }
-
-  @override
-  Future<Map?> getEqBand(String playerId, int bandIndex) {
-    throw PlatformException(
-      code: 'WebAudioError',
-      message: 'getEqBand() not implemented',
-    );
-  }
-
-  @override
-  Future<void> setEqBand(
-    String playerId,
-    int bandIndex,
-    Map<String, double> band,
-  ) {
-    throw PlatformException(
-      code: 'WebAudioError',
-      message: 'setEqBand() not implemented',
-    );
-  }
+  late EqualizerPlatformInterface equalizer;
 
   @override
   Future<void> setBalance(String playerId, double balance) async {

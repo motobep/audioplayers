@@ -44,11 +44,15 @@ class AudioPlayer {
 
   void Dispose();
 
-  void SetGain(int bandIndex, float value);
+  // Equalizer
+  bool GetEnabled();
+  void SetEnabled(bool isEnabled);
 
-  void SetBandwidth(int bandIndex, float value);
+  int GetNumberOfBands();
+  FlValue* GetLimits();
 
-  void SetFrequency(int bandIndex, float value);
+  FlValue* GetBand(int bandIndex);
+  void SetBand(int bandIndex, FlValue* band);
 
   void SetBalance(float balance);
 
@@ -97,6 +101,8 @@ class AudioPlayer {
   GObject* eqBands[__AUDIO_PLAYER_NUM_BUNDS];
 
   static const int eqNumBands = __AUDIO_PLAYER_NUM_BUNDS;
+  FlValue* _bandMap = fl_value_new_map();
+  FlValue* _limitsMap = fl_value_new_map();
 
   static void SourceSetup(GstElement* playbin,
                           GstElement* source,
@@ -121,4 +127,8 @@ class AudioPlayer {
   void OnPlaybackEnded();
 
   void OnPrepared(bool isPrepared);
+
+  void SetGain(int bandIndex, float value);
+  void SetBandwidth(int bandIndex, float value);
+  void SetFrequency(int bandIndex, float value);
 };

@@ -199,35 +199,31 @@ static void audioplayers_linux_plugin_handle_method_call(
     } else if (strcmp(method, "setPlayerMode") == 0) {
       // TODO check support for low latency mode:
       // https://gstreamer.freedesktop.org/documentation/additional/design/latency.html?gi-language=c
-    } else if (strcmp(method, "setGain") == 0) {
-      auto flBandIndex = fl_value_lookup_string(args, "bandIndex");
-      int bandIndex =
-          flBandIndex == nullptr ? 0 : fl_value_get_int(flBandIndex);
-
-      auto flValue = fl_value_lookup_string(args, "gain");
-      double value = flValue == nullptr ? 0.0f : fl_value_get_float(flValue);
-      player->SetGain(bandIndex, value);
-    } else if (strcmp(method, "setBandwidth") == 0) {
-      auto flBandIndex = fl_value_lookup_string(args, "bandIndex");
-      int bandIndex =
-          flBandIndex == nullptr ? 0 : fl_value_get_int(flBandIndex);
-
-      auto flValue = fl_value_lookup_string(args, "bandwidth");
-      double value = flValue == nullptr ? 0.0f : fl_value_get_float(flValue);
-      player->SetBandwidth(bandIndex, value);
-    } else if (strcmp(method, "setFrequency") == 0) {
-      auto flBandIndex = fl_value_lookup_string(args, "bandIndex");
-      int bandIndex =
-          flBandIndex == nullptr ? 0 : fl_value_get_int(flBandIndex);
-
-      auto flValue = fl_value_lookup_string(args, "frequency");
-      double value = flValue == nullptr ? 20.0f : fl_value_get_float(flValue);
-      player->SetFrequency(bandIndex, value);
-    } else if (strcmp(method, "setBalance") == 0) {
-      auto flBalance = fl_value_lookup_string(args, "balance");
-      double balance =
-          flBalance == nullptr ? 0.0f : fl_value_get_float(flBalance);
-      player->SetBalance(balance);
+    } else if (strcmp(method, "equalizer.getEnabled") == 0) {
+      result = fl_value_new_bool(player->GetEnabled());
+    } else if (strcmp(method, "equalizer.setEnabled") == 0) {
+      auto flValue = fl_value_lookup_string(args, "isEnabled");
+      if (flValue != nullptr) {
+        bool isEnabled = fl_value_get_bool(flValue);
+        player->SetEnabled(isEnabled);
+      }
+    } else if (strcmp(method, "equalizer.getNumberOfBands") == 0) {
+      result = fl_value_new_int(player->GetNumberOfBands());
+    } else if (strcmp(method, "equalizer.getLimits") == 0) {
+      result = player->GetLimits();
+    } else if (strcmp(method, "equalizer.getBand") == 0) {
+      auto flValue = fl_value_lookup_string(args, "bandIndex");
+      if (flValue != nullptr) {
+        int bandIndex = fl_value_get_int(flValue);
+        result = player->GetBand(bandIndex);
+      }
+    } else if (strcmp(method, "equalizer.setBand") == 0) {
+      auto flIndex = fl_value_lookup_string(args, "bandIndex");
+      auto flBand = fl_value_lookup_string(args, "band");
+      if (flIndex != nullptr && flBand != nullptr) {
+        int bandIndex = fl_value_get_int(flIndex);
+        player->SetBand(bandIndex, flBand);
+      }
     } else if (strcmp(method, "emitLog") == 0) {
       auto flMessage = fl_value_lookup_string(args, "message");
       auto message = flMessage == nullptr ? "" : fl_value_get_string(flMessage);

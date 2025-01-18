@@ -98,45 +98,7 @@ class FakeAudioplayersPlatform extends AudioplayersPlatformInterface {
   }
 
   @override
-  Future<int?> getEqNumberOfBands(
-    String playerId,
-  ) async {
-    calls.add(FakeCall(id: playerId, method: 'getEqNumberOfBands'));
-    return 0;
-  }
-
-  @override
-  Future<Map?> getEqLimits(String playerId) async {
-    calls.add(FakeCall(id: playerId, method: 'getEqLimits'));
-    return {};
-  }
-
-  @override
-  Future<Map?> getEqBand(String playerId, int bandIndex) async {
-    calls.add(
-      FakeCall(
-        id: playerId,
-        method: 'getEqBand',
-        value: <String, dynamic>{'bandIndex': bandIndex},
-      ),
-    );
-    return {};
-  }
-
-  @override
-  Future<void> setEqBand(
-    String playerId,
-    int bandIndex,
-    Map<String, double> band,
-  ) async {
-    calls.add(
-      FakeCall(
-        id: playerId,
-        method: 'setEqBand',
-        value: <String, dynamic>{'bandIndex': bandIndex, 'band': band},
-      ),
-    );
-  }
+  late EqualizerPlatformInterface equalizer;
 
   @override
   Future<void> setBalance(String playerId, double balance) async {

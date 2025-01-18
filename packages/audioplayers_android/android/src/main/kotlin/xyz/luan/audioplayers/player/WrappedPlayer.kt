@@ -191,6 +191,14 @@ class WrappedPlayer internal constructor(
     /**
      * Equalizer methods
      */
+    fun getEqEnabled(): Boolean? {
+        return player?.getEqEnabled()
+    }
+
+    fun setEqEnabled(isEnabled: Boolean) {
+        player?.setEqEnabled(isEnabled)
+    }
+
     fun getEqNumberOfBands(): Short? {
         return player?.getEqNumberOfBands()
     }
