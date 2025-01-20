@@ -63,7 +63,8 @@ AudioPlayer::AudioPlayer(std::string playerId,
     const double gainLimits[] = {-24.0, 12.0};
     const double bandwidthLimits[] = {0.0, 20000.0};
     const double frequencyLimits[] = {20.0, 20000.0};
-    fl_value_set_string(_limitsMap, "gain", fl_value_new_float_list(gainLimits, 2));
+    fl_value_set_string(_limitsMap, "gain",
+                        fl_value_new_float_list(gainLimits, 2));
     fl_value_set_string(_limitsMap, "bandwidth",
                         fl_value_new_float_list(bandwidthLimits, 2));
     fl_value_set_string(_limitsMap, "frequency",
@@ -305,6 +306,9 @@ bool AudioPlayer::GetEnabled() {
   return true;
 }
 
+// TODO: implement
+// how to dynamicly change element in pipiline
+// https://gstreamer.freedesktop.org/documentation/application-development/advanced/pipeline-manipulation.html?gi-language=c#changing-elements-in-a-pipeline
 void AudioPlayer::SetEnabled(bool isEnabled) {
   // not implemented
 }
@@ -333,6 +337,11 @@ FlValue* AudioPlayer::GetBand(int bandIndex) {
 }
 
 void AudioPlayer::SetBand(int bandIndex, FlValue* band) {
+  if (!equalizer) {
+    this->OnLog("Equalizer was not initialized");
+    return;
+  }
+
   auto flGain = fl_value_lookup_string(band, "gain");
   if (flGain != nullptr) {
     double gain = fl_value_get_float(flGain);
@@ -353,31 +362,16 @@ void AudioPlayer::SetBand(int bandIndex, FlValue* band) {
 }
 
 void AudioPlayer::SetGain(int bandIndex, float value) {
-  if (!equalizer) {
-    this->OnLog("Equalizer was not initialized");
-    return;
-  }
-
   value = getInBounds(value, -24.0, 12.0);
   g_object_set(AudioPlayer::eqBands[bandIndex], "gain", value, NULL);
 }
 
 void AudioPlayer::SetBandwidth(int bandIndex, float value) {
-  if (!equalizer) {
-    this->OnLog("Equalizer was not initialized");
-    return;
-  }
-
   value = getInBounds(value, 0.0, 20000.0);
   g_object_set(AudioPlayer::eqBands[bandIndex], "bandwidth", value, NULL);
 }
 
 void AudioPlayer::SetFrequency(int bandIndex, float value) {
-  if (!equalizer) {
-    this->OnLog("Equalizer was not initialized");
-    return;
-  }
-
   value = getInBounds(value, 20.0, 20000.0);
   g_object_set(AudioPlayer::eqBands[bandIndex], "freq", value, NULL);
 }
