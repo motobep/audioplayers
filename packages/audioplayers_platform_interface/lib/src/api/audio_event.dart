@@ -6,6 +6,7 @@ enum AudioEventType {
   seekComplete,
   complete,
   prepared,
+  focusManager,
 }
 
 /// Event emitted from the platform implementation.

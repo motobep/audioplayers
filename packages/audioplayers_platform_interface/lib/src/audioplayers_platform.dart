@@ -239,6 +239,12 @@ mixin EventChannelAudioplayersPlatform
               eventType: AudioEventType.prepared,
               isPrepared: isPrepared,
             );
+          case 'audio.onFocusManager':
+            final value = map.getString('value');
+            return AudioEvent(
+              eventType: AudioEventType.focusManager,
+              logMessage: value,
+            );
           case 'audio.onLog':
             final value = map.getString('value');
             return AudioEvent(

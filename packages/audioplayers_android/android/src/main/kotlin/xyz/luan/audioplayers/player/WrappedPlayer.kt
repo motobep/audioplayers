@@ -120,16 +120,25 @@ class WrappedPlayer internal constructor(
         onGranted = {
             // Check if in playing state, as the focus can also be gained e.g. after a phone call, even if not playing.
             if (playing) {
+                eventHandler.success("audio.onFocusManager",
+                    hashMapOf("value" to "grantedPlaying"))
                 player?.start()
+            } else {
+                eventHandler.success("audio.onFocusManager",
+                    hashMapOf("value" to "grantedNotPlaying"))
             }
         },
         onLoss = { isTransient ->
             if (isTransient) {
                 // Do not check or set playing state, as the state should be recovered after granting focus again.
                 player?.pause()
+                eventHandler.success("audio.onFocusManager",
+                    hashMapOf("value" to "lossTransient"))
             } else {
                 // Audio focus won't be recovered
                 pause()
+                eventHandler.success("audio.onFocusManager",
+                    hashMapOf("value" to "lossNotTransient"))
             }
         },
     )
