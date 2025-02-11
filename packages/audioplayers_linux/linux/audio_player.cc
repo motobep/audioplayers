@@ -303,14 +303,36 @@ void AudioPlayer::OnLog(const gchar* message) {
 }
 
 bool AudioPlayer::GetEnabled() {
-  return true;
+  return _isEnabled;
 }
 
-// TODO: implement
 // how to dynamicly change element in pipiline
 // https://gstreamer.freedesktop.org/documentation/application-development/advanced/pipeline-manipulation.html?gi-language=c#changing-elements-in-a-pipeline
 void AudioPlayer::SetEnabled(bool isEnabled) {
-  // not implemented
+  if (!isEnabled) {
+    if (_isEnabled) {
+      // Disable
+      for (int i = 0; i < AudioPlayer::eqNumBands; i++) {
+        // Saving previous gains
+        gdouble gain;
+        g_object_get(AudioPlayer::eqBands[i], "gain", &gain, NULL);
+        eqWhenDisabledGains[i] = gain;
+        // Disable current gains
+        SetGain(i, 0.0);
+      }
+      _isEnabled = isEnabled;
+    }
+  } else {
+    if (!_isEnabled) {
+      // Enable
+      _isEnabled = isEnabled;
+      for (int i = 0; i < AudioPlayer::eqNumBands; i++) {
+        // Use saved gains
+        float gain = eqWhenDisabledGains[i];
+        SetGain(i, gain);
+      }
+    }
+  }
 }
 
 int AudioPlayer::GetNumberOfBands() {
@@ -325,7 +347,13 @@ FlValue* AudioPlayer::GetBand(int bandIndex) {
   gdouble gain;
   gdouble bandwidth;
   gdouble freq;
-  g_object_get(AudioPlayer::eqBands[bandIndex], "gain", &gain, NULL);
+
+  if (_isEnabled) {
+    g_object_get(AudioPlayer::eqBands[bandIndex], "gain", &gain, NULL);
+  } else {
+    gain = eqWhenDisabledGains[bandIndex];
+  }
+
   g_object_get(AudioPlayer::eqBands[bandIndex], "bandwidth", &bandwidth, NULL);
   g_object_get(AudioPlayer::eqBands[bandIndex], "freq", &freq, NULL);
 
@@ -363,7 +391,11 @@ void AudioPlayer::SetBand(int bandIndex, FlValue* band) {
 
 void AudioPlayer::SetGain(int bandIndex, float value) {
   value = getInBounds(value, -24.0, 12.0);
-  g_object_set(AudioPlayer::eqBands[bandIndex], "gain", value, NULL);
+  if (_isEnabled) {
+    g_object_set(AudioPlayer::eqBands[bandIndex], "gain", value, NULL);
+  } else {
+    eqWhenDisabledGains[bandIndex] = value;
+  }
 }
 
 void AudioPlayer::SetBandwidth(int bandIndex, float value) {

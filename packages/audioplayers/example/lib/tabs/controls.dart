@@ -203,6 +203,7 @@ class _Equalizer extends StatelessWidget {
 
     return FutureBuilder<Map<String, dynamic>>(
       future: () async {
+        final isEnabled = await player.equalizer.getEnabled();
         final numBands = (await player.equalizer.getNumberOfBands())!;
         final limits = await player.equalizer.getLimits();
 
@@ -212,6 +213,7 @@ class _Equalizer extends StatelessWidget {
           bands.add(el);
         }
         return {
+          'isEnabled': isEnabled,
           'numBands': numBands,
           'limits': limits,
           'bands': bands,
@@ -224,6 +226,7 @@ class _Equalizer extends StatelessWidget {
         if (snapshot.hasError) {
           return const Text('Equalizer widget errored');
         }
+        final isEnabled = snapshot.data!['isEnabled'] as bool;
         final numBands = snapshot.data!['numBands'] as int;
         final limits = snapshot.data!['limits'] as Map;
         final bands = snapshot.data!['bands'] as List;
@@ -238,6 +241,7 @@ class _Equalizer extends StatelessWidget {
               children: [
                 const Text('isEnabled'),
                 _Checkbox(
+                  value: isEnabled,
                   callback: (isChecked) {
                     player.equalizer.setEnabled(isChecked);
                   },
@@ -378,16 +382,23 @@ class _EqSliderState extends State<_EqSlider> {
 }
 
 class _Checkbox extends StatefulWidget {
+  final bool value;
   // ignore: avoid_positional_boolean_parameters
   final void Function(bool value) callback;
-  const _Checkbox({required this.callback});
+  const _Checkbox({required this.value, required this.callback});
 
   @override
   State<_Checkbox> createState() => _CheckboxState();
 }
 
 class _CheckboxState extends State<_Checkbox> {
-  bool isChecked = false;
+  late bool isChecked;
+
+  @override
+  void initState() {
+    isChecked = widget.value;
+    super.initState();
+  }
 
   @override
   Widget build(BuildContext context) {
