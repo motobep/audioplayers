@@ -99,10 +99,12 @@ class AudioPlayer {
   FlEventChannel* _eventChannel;
 
   GObject* eqBands[__AUDIO_PLAYER_NUM_BUNDS];
+  float eqWhenDisabledGains[__AUDIO_PLAYER_NUM_BUNDS];
 
   static const int eqNumBands = __AUDIO_PLAYER_NUM_BUNDS;
   FlValue* _bandMap = fl_value_new_map();
   FlValue* _limitsMap = fl_value_new_map();
+  bool _isEnabled = true;
 
   static void SourceSetup(GstElement* playbin,
                           GstElement* source,
