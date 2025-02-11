@@ -131,7 +131,7 @@ class WrappedPlayer internal constructor(
         onLoss = { isTransient ->
             if (isTransient) {
                 // Do not check or set playing state, as the state should be recovered after granting focus again.
-                player?.pause()
+                pause()
                 eventHandler.success("audio.onFocusManager",
                     hashMapOf("value" to "lossTransient"))
             } else {
