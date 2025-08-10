@@ -114,6 +114,7 @@ class AudioplayersPlugin : FlutterPlugin, IUpdateCallback {
         if (call.method == "create") {
             val eventHandler = EventHandler(EventChannel(binaryMessenger, "xyz.luan/audioplayers/events/$playerId"))
             players[playerId] = WrappedPlayer(this, eventHandler, defaultAudioContext.copy(), soundPoolManager)
+            players[playerId]!!.getOrCreatePlayer()
             response.success(1)
             return
         }
@@ -156,6 +157,38 @@ class AudioplayersPlugin : FlutterPlugin, IUpdateCallback {
                 "setVolume" -> {
                     val volume = call.argument<Double>("volume") ?: error("volume is required")
                     player.volume = volume.toFloat()
+                }
+
+                "equalizer.getEnabled" -> {
+                    response.success(player.getEqEnabled())
+                    return
+                }
+
+                "equalizer.setEnabled" -> {
+                    val isEnabled = call.argument<Boolean>("isEnabled") ?: error("isEnabled is required")
+                    player.setEqEnabled(isEnabled)
+                }
+
+                "equalizer.getNumberOfBands" -> {
+                    response.success(player.getEqNumberOfBands())
+                    return
+                }
+
+                "equalizer.getLimits" -> {
+                    response.success(player.getEqLimits())
+                    return
+                }
+
+                "equalizer.getBand" -> {
+                    val bandIndex = call.argument<Int>("bandIndex")?.toShort() ?: error("bandIndex is required")
+                    response.success(player.getEqBand(bandIndex))
+                    return
+                }
+
+                "equalizer.setBand" -> {
+                    val bandIndex = call.argument<Int>("bandIndex")?.toShort() ?: error("bandIndex is required")
+                    val band = call.argument<Map<String, Float>>("band") ?: error("band is required")
+                    player.setEqBand(bandIndex, band)
                 }
 
                 "setBalance" -> {

@@ -3,6 +3,15 @@
 #define STR_LINK_TROUBLESHOOTING \
   "https://github.com/bluefireteam/audioplayers/blob/main/troubleshooting.md"
 
+inline float getInBounds(float value, float min, float max) {
+  if (value > max) {
+    return max;
+  } else if (value < min) {
+    return min;
+  }
+  return value;
+}
+
 AudioPlayer::AudioPlayer(std::string playerId,
                          FlMethodChannel* methodChannel,
                          FlEventChannel* eventChannel)
@@ -17,22 +26,49 @@ AudioPlayer::AudioPlayer(std::string playerId,
     throw "Not all elements could be created.";
   }
 
-  // Setup stereo balance controller
+  // Setup equalizer and stereo balance controller
+  equalizer = gst_element_factory_make("equalizer-nbands", "equalizer");
   panorama = gst_element_factory_make("audiopanorama", NULL);
-  if (panorama) {
+  if (equalizer && panorama) {
     audiobin = gst_bin_new(NULL);
     audiosink = gst_element_factory_make("autoaudiosink", NULL);
 
-    gst_bin_add_many(GST_BIN(audiobin), panorama, audiosink, NULL);
-    gst_element_link(panorama, audiosink);
+    gst_bin_add_many(GST_BIN(audiobin), equalizer, panorama, audiosink, NULL);
+    if (!gst_element_link_many(equalizer, panorama, audiosink, NULL)) {
+      throw "Can't link elements\n";
+    }
 
-    GstPad* sinkpad = gst_element_get_static_pad(panorama, "sink");
-    panoramaSinkPad = gst_ghost_pad_new("sink", sinkpad);
-    gst_element_add_pad(audiobin, panoramaSinkPad);
-    gst_object_unref(GST_OBJECT(sinkpad));
+    GstPad* pad = gst_element_get_static_pad(equalizer, "sink");
+    sinkPad = gst_ghost_pad_new("sink", pad);
+    gst_element_add_pad(audiobin, sinkPad);
+    gst_object_unref(GST_OBJECT(pad));
 
     g_object_set(G_OBJECT(playbin), "audio-sink", audiobin, NULL);
     g_object_set(G_OBJECT(panorama), "method", 1, NULL);
+    g_object_set(G_OBJECT(equalizer), "num-bands", AudioPlayer::eqNumBands,
+                 NULL);
+
+    // Set bands
+    for (int i = 0; i < AudioPlayer::eqNumBands; i++) {
+      eqBands[i] =
+          gst_child_proxy_get_child_by_index(GST_CHILD_PROXY(equalizer), i);
+
+      // Set initial values
+      SetGain(i, 0.0);
+      SetBandwidth(i, 0.0);
+      SetFrequency(i, 20.0);
+    }
+
+    // Set limits
+    const double gainLimits[] = {-24.0, 12.0};
+    const double bandwidthLimits[] = {0.0, 20000.0};
+    const double frequencyLimits[] = {20.0, 20000.0};
+    fl_value_set_string(_limitsMap, "gain",
+                        fl_value_new_float_list(gainLimits, 2));
+    fl_value_set_string(_limitsMap, "bandwidth",
+                        fl_value_new_float_list(bandwidthLimits, 2));
+    fl_value_set_string(_limitsMap, "frequency",
+                        fl_value_new_float_list(frequencyLimits, 2));
   }
 
   // Setup source options
@@ -303,6 +339,113 @@ void AudioPlayer::OnLog(const gchar* message) {
   }
 }
 
+bool AudioPlayer::GetEnabled() {
+  return _isEnabled;
+}
+
+// how to dynamicly change element in pipiline
+// https://gstreamer.freedesktop.org/documentation/application-development/advanced/pipeline-manipulation.html?gi-language=c#changing-elements-in-a-pipeline
+void AudioPlayer::SetEnabled(bool isEnabled) {
+  if (!isEnabled) {
+    if (_isEnabled) {
+      // Disable
+      for (int i = 0; i < AudioPlayer::eqNumBands; i++) {
+        // Saving previous gains
+        gdouble gain;
+        g_object_get(AudioPlayer::eqBands[i], "gain", &gain, NULL);
+        eqWhenDisabledGains[i] = gain;
+        // Disable current gains
+        SetGain(i, 0.0);
+      }
+      _isEnabled = isEnabled;
+    }
+  } else {
+    if (!_isEnabled) {
+      // Enable
+      _isEnabled = isEnabled;
+      for (int i = 0; i < AudioPlayer::eqNumBands; i++) {
+        // Use saved gains
+        float gain = eqWhenDisabledGains[i];
+        SetGain(i, gain);
+      }
+    }
+  }
+}
+
+int AudioPlayer::GetNumberOfBands() {
+  return __AUDIO_PLAYER_NUM_BUNDS;
+}
+
+FlValue* AudioPlayer::GetLimits() {
+  return _limitsMap;
+}
+
+FlValue* AudioPlayer::GetBand(int bandIndex) {
+  gdouble gain;
+  gdouble bandwidth;
+  gdouble freq;
+
+  if (_isEnabled) {
+    g_object_get(AudioPlayer::eqBands[bandIndex], "gain", &gain, NULL);
+  } else {
+    gain = eqWhenDisabledGains[bandIndex];
+  }
+
+  g_object_get(AudioPlayer::eqBands[bandIndex], "bandwidth", &bandwidth, NULL);
+  g_object_get(AudioPlayer::eqBands[bandIndex], "freq", &freq, NULL);
+
+  fl_value_set_string(_bandMap, "gain", fl_value_new_float(gain));
+  fl_value_set_string(_bandMap, "bandwidth", fl_value_new_float(bandwidth));
+  fl_value_set_string(_bandMap, "frequency", fl_value_new_float(freq));
+
+  return _bandMap;
+}
+
+void AudioPlayer::SetBand(int bandIndex, FlValue* band) {
+  if (!equalizer) {
+    this->OnLog("Equalizer was not initialized");
+    return;
+  }
+
+  auto flGain = fl_value_lookup_string(band, "gain");
+  if (flGain != nullptr) {
+    double gain = fl_value_get_float(flGain);
+    SetGain(bandIndex, gain);
+  }
+
+  auto flBandwidth = fl_value_lookup_string(band, "bandwidth");
+  if (flBandwidth != nullptr) {
+    double value = fl_value_get_float(flBandwidth);
+    SetBandwidth(bandIndex, value);
+  }
+
+  auto flFrequency = fl_value_lookup_string(band, "frequency");
+  if (flFrequency != nullptr) {
+    double value = fl_value_get_float(flFrequency);
+    SetFrequency(bandIndex, value);
+  }
+}
+
+void AudioPlayer::SetGain(int bandIndex, float value) {
+  value = getInBounds(value, -24.0, 12.0);
+  if (_isEnabled) {
+    g_object_set(AudioPlayer::eqBands[bandIndex], "gain", value, NULL);
+  } else {
+    eqWhenDisabledGains[bandIndex] = value;
+  }
+}
+
+void AudioPlayer::SetBandwidth(int bandIndex, float value) {
+  value = getInBounds(value, 0.0, 20000.0);
+  g_object_set(AudioPlayer::eqBands[bandIndex], "bandwidth", value, NULL);
+}
+
+void AudioPlayer::SetFrequency(int bandIndex, float value) {
+  value = getInBounds(value, 20.0, 20000.0);
+  g_object_set(AudioPlayer::eqBands[bandIndex], "freq", value, NULL);
+}
+
+
 void AudioPlayer::SetBalance(float balance) {
   if (!panorama) {
     this->OnLog("Audiopanorama was not initialized");
@@ -481,15 +624,17 @@ void AudioPlayer::Dispose() {
     source = nullptr;
   }
 
-  if (panorama) {
+  if (equalizer && panorama) {
     gst_element_set_state(audiobin, GST_STATE_NULL);
 
-    gst_element_remove_pad(audiobin, panoramaSinkPad);
+    gst_element_remove_pad(audiobin, sinkPad);
     gst_bin_remove(GST_BIN(audiobin), audiosink);
     gst_bin_remove(GST_BIN(audiobin), panorama);
+    gst_bin_remove(GST_BIN(audiobin), equalizer);
 
     // audiobin gets unreferenced (2x) via playbin
     panorama = nullptr;
+    equalizer = nullptr;
   }
 
   gst_object_unref(GST_OBJECT(playbin));

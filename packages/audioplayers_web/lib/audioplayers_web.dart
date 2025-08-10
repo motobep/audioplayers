@@ -124,6 +124,10 @@ class WebAudioplayersPlatform extends AudioplayersPlatformInterface {
     getPlayer(playerId).volume = volume;
   }
 
+  /// No implemetation
+  @override
+  late EqualizerPlatformInterface equalizer;
+
   @override
   Future<void> setBalance(String playerId, double balance) async {
     getPlayer(playerId).balance = balance;

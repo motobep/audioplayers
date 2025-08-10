@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:audioplayers/audioplayers.dart';
 import 'package:audioplayers_example/components/btn.dart';
 import 'package:audioplayers_example/components/list_tile.dart';
@@ -51,6 +53,7 @@ class _ControlsTabState extends State<ControlsTab>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+
     return TabContent(
       children: [
         WrappedListTile(
@@ -176,12 +179,297 @@ class _ControlsTabState extends State<ControlsTab>
             ),
           ],
         ),
+        _Equalizer(player: widget.player),
       ],
     );
   }
 
   @override
   bool get wantKeepAlive => true;
+}
+
+class _Equalizer extends StatelessWidget {
+  final AudioPlayer player;
+
+  const _Equalizer({
+    required this.player,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (!Platform.isLinux && !Platform.isAndroid) {
+      return const SizedBox.shrink();
+    }
+
+    return FutureBuilder<Map<String, dynamic>>(
+      future: () async {
+        final isEnabled = await player.equalizer.getEnabled();
+        final numBands = (await player.equalizer.getNumberOfBands())!;
+        final limits = await player.equalizer.getLimits();
+
+        final bands = [];
+        for (var i = 0; i < numBands; i++) {
+          final el = (await player.equalizer.getBand(i))!;
+          bands.add(el);
+        }
+        return {
+          'isEnabled': isEnabled,
+          'numBands': numBands,
+          'limits': limits,
+          'bands': bands,
+        };
+      }(),
+      builder: (context, AsyncSnapshot<Map<String, dynamic>> snapshot) {
+        if (!snapshot.hasData) {
+          return const Text('Equalizer...');
+        }
+        if (snapshot.hasError) {
+          return const Text('Equalizer widget errored');
+        }
+        final isEnabled = snapshot.data!['isEnabled'] as bool;
+        final numBands = snapshot.data!['numBands'] as int;
+        final limits = snapshot.data!['limits'] as Map;
+        final bands = snapshot.data!['bands'] as List;
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8.0),
+              child: Text('$numBands band EQ'),
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text('isEnabled'),
+                _Checkbox(
+                  value: isEnabled,
+                  callback: (isChecked) {
+                    player.equalizer.setEnabled(isChecked);
+                  },
+                ),
+              ],
+            ),
+            ...(List.generate(numBands, (i) => i).map(
+              (i) {
+                final band = bands[i] as Map;
+                final gain = band['gain'] as double;
+                final bw = band['bandwidth'] as double;
+                final freq = band['frequency'] as double;
+                final gainLimits = limits['gain'] as List;
+                final bandwidthLimits = limits['bandwidth'] as List;
+                final frequencyLimits = limits['frequency'] as List;
+
+                return Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10.0),
+                      child: Text(
+                        '№ $i band',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    if (gainLimits.length == 2)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: _EqSlider(
+                          name: 'Gain',
+                          value: gain,
+                          min: gainLimits[0] as double,
+                          max: gainLimits[1] as double,
+                          onChangeEnd: (value) async {
+                            player.equalizer.setBand(i, {'gain': value});
+                          },
+                        ),
+                      ),
+                    if (bandwidthLimits.length == 2)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: _EqSlider(
+                          name: 'bandwidth',
+                          value: bw,
+                          min: bandwidthLimits[0] as double,
+                          max: bandwidthLimits[1] as double,
+                          onChangeEnd: (value) async {
+                            player.equalizer.setBand(i, {'bandwidth': value});
+                          },
+                        ),
+                      ),
+                    if (frequencyLimits.length == 2)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: _EqSlider(
+                          name: 'frequency',
+                          value: freq,
+                          min: frequencyLimits[0] as double,
+                          max: frequencyLimits[1] as double,
+                          onChangeEnd: (value) async {
+                            player.equalizer.setBand(i, {'frequency': value});
+                          },
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ).toList()),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _EqSlider extends StatefulWidget {
+  const _EqSlider({
+    required this.onChangeEnd,
+    required this.name,
+    required this.value,
+    required this.min,
+    required this.max,
+  });
+
+  final void Function(double) onChangeEnd;
+  final String name;
+  final double value;
+  final double min;
+  final double max;
+
+  @override
+  State<_EqSlider> createState() => _EqSliderState();
+}
+
+class _EqSliderState extends State<_EqSlider> {
+  late double _value;
+
+  @override
+  void initState() {
+    _value = widget.value;
+    super.initState();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('${widget.min}'),
+              Text('${widget.name} $_value'),
+              Text('${widget.max}'),
+            ],
+          ),
+        ),
+        Slider(
+          min: widget.min,
+          max: widget.max,
+          value: _value,
+          onChanged: (value) {
+            setState(() {
+              _value = value;
+            });
+          },
+          onChangeEnd: (value) {
+            widget.onChangeEnd(value);
+            setState(() {
+              _value = value;
+            });
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _Checkbox extends StatefulWidget {
+  final bool value;
+  // ignore: avoid_positional_boolean_parameters
+  final void Function(bool value) callback;
+  const _Checkbox({required this.value, required this.callback});
+
+  @override
+  State<_Checkbox> createState() => _CheckboxState();
+}
+
+class _CheckboxState extends State<_Checkbox> {
+  late bool isChecked;
+
+  @override
+  void initState() {
+    isChecked = widget.value;
+    super.initState();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Checkbox(
+      value: isChecked,
+      onChanged: (bool? value) {
+        setState(() {
+          isChecked = value!;
+          widget.callback(isChecked);
+        });
+      },
+    );
+  }
+}
+
+class _SeekDialog extends StatelessWidget {
+  final VoidCallback seekDuration;
+  final VoidCallback seekPercent;
+  final void Function(String val) setValue;
+  final String value;
+
+  const _SeekDialog({
+    required this.seekDuration,
+    required this.seekPercent,
+    required this.value,
+    required this.setValue,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text('Pick a duration and unit to seek'),
+        TxtBox(
+          value: value,
+          onChange: setValue,
+        ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Btn(
+              txt: 'millis',
+              onPressed: () {
+                Navigator.of(context).pop();
+                seekDuration();
+              },
+            ),
+            Btn(
+              txt: 'seconds',
+              onPressed: () {
+                Navigator.of(context).pop();
+                seekDuration();
+              },
+            ),
+            Btn(
+              txt: '%',
+              onPressed: () {
+                Navigator.of(context).pop();
+                seekPercent();
+              },
+            ),
+            TextButton(
+              onPressed: Navigator.of(context).pop,
+              child: const Text('Cancel'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 }
 
 class _SeekDialog extends StatelessWidget {

@@ -122,7 +122,7 @@ class WrappedPlayer internal constructor(
         return runCatching { player?.getCurrentPosition().takeUnless { it == 0 } }.getOrNull() ?: -1
     }
 
-    private fun getOrCreatePlayer(): Player {
+    public fun getOrCreatePlayer(): Player {
         val currentPlayer = player
         return if (released || currentPlayer == null) {
             createPlayer().also {
@@ -191,6 +191,33 @@ class WrappedPlayer internal constructor(
 
     val audioManager: AudioManager
         get() = ref.getAudioManager()
+
+    /**
+     * Equalizer methods
+     */
+    fun getEqEnabled(): Boolean? {
+        return player?.getEqEnabled()
+    }
+
+    fun setEqEnabled(isEnabled: Boolean) {
+        player?.setEqEnabled(isEnabled)
+    }
+
+    fun getEqNumberOfBands(): Short? {
+        return player?.getEqNumberOfBands()
+    }
+
+    fun getEqLimits(): Map<String, List<Float>>? {
+        return player?.getEqLimits()
+    }
+
+    fun getEqBand(bandIndex: Short): Map<String, Float>? {
+        return player?.getEqBand(bandIndex)
+    }
+
+    fun setEqBand(bandIndex: Short, band: Map<String, Float>) {
+        player?.setEqBand(bandIndex, band)
+    }
 
     /**
      * Playback handling methods

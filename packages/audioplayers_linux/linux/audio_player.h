@@ -20,6 +20,8 @@ extern "C" {
 #include <gst/gst.h>
 }
 
+#define __AUDIO_PLAYER_NUM_BUNDS 10
+
 class AudioPlayer {
  public:
   AudioPlayer(std::string playerId,
@@ -39,6 +41,16 @@ class AudioPlayer {
   void Resume();
 
   void Dispose();
+
+  // Equalizer
+  bool GetEnabled();
+  void SetEnabled(bool isEnabled);
+
+  int GetNumberOfBands();
+  FlValue* GetLimits();
+
+  FlValue* GetBand(int bandIndex);
+  void SetBand(int bandIndex, FlValue* band);
 
   void SetBalance(float balance);
 
@@ -67,10 +79,11 @@ class AudioPlayer {
   // Gst members
   GstElement* playbin = nullptr;
   GstElement* source = nullptr;
+  GstElement* equalizer = nullptr;
   GstElement* panorama = nullptr;
   GstElement* audiobin = nullptr;
   GstElement* audiosink = nullptr;
-  GstPad* panoramaSinkPad = nullptr;
+  GstPad* sinkPad = nullptr;
   GstBus* bus = nullptr;
 
   bool _isInitialized = false;
@@ -83,6 +96,15 @@ class AudioPlayer {
   std::string _url{};
   std::string _playerId;
   FlEventChannel* _eventChannel;
+
+  GObject* eqBands[__AUDIO_PLAYER_NUM_BUNDS];
+  float eqWhenDisabledGains[__AUDIO_PLAYER_NUM_BUNDS];
+
+  static const int eqNumBands = __AUDIO_PLAYER_NUM_BUNDS;
+  FlValue* _bandMap = fl_value_new_map();
+  FlValue* _limitsMap = fl_value_new_map();
+  bool _isEnabled = true;
+
 
   static void SourceSetup(GstElement* playbin,
                           GstElement* source,
@@ -111,4 +133,8 @@ class AudioPlayer {
   void OnPlaybackEnded();
 
   void OnPrepared(bool isPrepared);
+
+  void SetGain(int bandIndex, float value);
+  void SetBandwidth(int bandIndex, float value);
+  void SetFrequency(int bandIndex, float value);
 };

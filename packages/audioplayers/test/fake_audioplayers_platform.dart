@@ -95,6 +95,9 @@ class FakeAudioplayersPlatform extends AudioplayersPlatformInterface {
   }
 
   @override
+  late EqualizerPlatformInterface equalizer;
+
+  @override
   Future<void> setBalance(String playerId, double balance) async {
     calls.add(FakeCall(id: playerId, method: 'setBalance', value: balance));
   }

@@ -37,6 +37,8 @@ class AudioPlayer {
 
   double get volume => _volume;
 
+  late Equalizer equalizer;
+
   double _balance = 0.0;
 
   double get balance => _balance;
@@ -164,6 +166,9 @@ class AudioPlayer {
             onError: _eventStreamController.addError,
           );
       creatingCompleter.complete();
+
+      // After player init
+      equalizer = Equalizer(playerId);
     } on Exception catch (e, stackTrace) {
       creatingCompleter.completeError(e, stackTrace);
     }
@@ -420,5 +425,37 @@ class AudioPlayer {
 
     // Needs to be called after cancelling event stream subscription:
     await _platform.dispose(playerId);
+  }
+}
+
+class Equalizer {
+  final _platform = AudioplayersPlatformInterface.instance;
+  final String playerId;
+
+  Equalizer(this.playerId);
+
+  Future<bool?> getEnabled() {
+    return _platform.equalizer.getEnabled(playerId);
+  }
+
+  // ignore: avoid_positional_boolean_parameters
+  Future<void> setEnabled(bool isEnabled) {
+    return _platform.equalizer.setEnabled(playerId, isEnabled);
+  }
+
+  Future<int?> getNumberOfBands() {
+    return _platform.equalizer.getNumberOfBands(playerId);
+  }
+
+  Future<Map?> getLimits() {
+    return _platform.equalizer.getLimits(playerId);
+  }
+
+  Future<Map?> getBand(int bandIndex) {
+    return _platform.equalizer.getBand(playerId, bandIndex);
+  }
+
+  Future<void> setBand(int bandIndex, Map<String, double> band) {
+    return _platform.equalizer.setBand(playerId, bandIndex, band);
   }
 }

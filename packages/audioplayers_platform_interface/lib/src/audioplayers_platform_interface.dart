@@ -64,6 +64,8 @@ abstract class MethodChannelAudioplayersPlatformInterface {
   /// Moves the cursor to the desired position.
   Future<void> seek(String playerId, Duration position);
 
+  abstract EqualizerPlatformInterface equalizer;
+
   /// Sets the stereo balance.
   ///
   /// -1 - The left channel is at full volume; the right channel is silent.
@@ -141,4 +143,23 @@ abstract class MethodChannelAudioplayersPlatformInterface {
 
 abstract class EventChannelAudioplayersPlatformInterface {
   Stream<AudioEvent> getEventStream(String playerId);
+}
+
+abstract class EqualizerPlatformInterface {
+  Future<bool?> getEnabled(String playerId);
+
+  // ignore: avoid_positional_boolean_parameters
+  Future<void> setEnabled(String playerId, bool isEnabled);
+
+  Future<int?> getNumberOfBands(String playerId);
+
+  Future<Map?> getLimits(String playerId);
+
+  Future<Map?> getBand(String playerId, int bandIndex);
+
+  Future<void> setBand(
+    String playerId,
+    int bandIndex,
+    Map<String, double> band,
+  );
 }

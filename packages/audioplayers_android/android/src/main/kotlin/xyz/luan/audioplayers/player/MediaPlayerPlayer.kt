@@ -1,15 +1,24 @@
 package xyz.luan.audioplayers.player
 
 import android.media.MediaPlayer
+import android.media.audiofx.Equalizer
 import android.os.Build
 import android.os.PowerManager
 import xyz.luan.audioplayers.AudioContextAndroid
 import xyz.luan.audioplayers.source.Source
 
-class MediaPlayerPlayer(
-    private val wrappedPlayer: WrappedPlayer,
-) : Player {
-    private val mediaPlayer = createMediaPlayer(wrappedPlayer)
+class MediaPlayerPlayer: Player {
+    private val wrappedPlayer: WrappedPlayer
+    private val mediaPlayer: MediaPlayer
+    private var equalizer: Equalizer
+
+    public constructor(wrappedPlayer: WrappedPlayer) {
+        this.wrappedPlayer = wrappedPlayer
+        this.mediaPlayer = createMediaPlayer(wrappedPlayer)
+
+        val audioSessionId = this.mediaPlayer.getAudioSessionId()
+        this.equalizer = Equalizer(0, audioSessionId)
+    }
 
     private fun createMediaPlayer(wrappedPlayer: WrappedPlayer): MediaPlayer {
         val mediaPlayer = MediaPlayer().apply {
@@ -35,6 +44,51 @@ class MediaPlayerPlayer(
     override fun isActuallyPlaying(): Boolean {
         return mediaPlayer.isPlaying
     }
+
+    /**
+     * Equalizer methods
+     */
+    override fun getEqEnabled(): Boolean {
+        return this.equalizer.getEnabled()
+    }
+
+    override fun setEqEnabled(isEnabled: Boolean) {
+        this.equalizer.setEnabled(isEnabled)
+    }
+
+    override fun getEqNumberOfBands(): Short {
+        return equalizer.getNumberOfBands()
+    }
+
+    override fun getEqLimits(): Map<String, List<Float>> {
+        val range = equalizer.getBandLevelRange().map { it / 100.0f } // milli -> dB
+
+        return mapOf(
+            "gain" to range,
+            "bandwidth" to listOf(),
+            "frequency" to listOf(),
+        )
+    }
+
+    override fun getEqBand(bandIndex: Short): Map<String, Float> {
+        val gainMilliB = equalizer.getBandLevel(bandIndex) // milli Bel
+        val gain: Float = gainMilliB / 100.0f // dB
+
+        val freqRange = equalizer.getBandFreqRange(bandIndex)
+        val bandwidth: Float = (freqRange[1] - freqRange[0]) / 1000.0f // milli -> Hz
+
+        val freq: Float = equalizer.getCenterFreq(bandIndex) / 1000.0f // milli -> Hz
+
+        return mapOf("gain" to gain, "bandwidth" to bandwidth, "frequency" to freq)
+    }
+
+    override fun setEqBand(bandIndex: Short, band: Map<String, Float>) {
+        val gainMilliB: Short = (band["gain"]!! * 100).toInt().toShort()
+        equalizer.setBandLevel(bandIndex, gainMilliB)
+    }
+    /**
+     * End Equalizer methods
+     */
 
     override fun setVolume(leftVolume: Float, rightVolume: Float) {
         mediaPlayer.setVolume(leftVolume, rightVolume)

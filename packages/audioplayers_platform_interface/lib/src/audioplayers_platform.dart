@@ -28,9 +28,6 @@ class AudioplayersPlatform extends AudioplayersPlatformInterface
 
 mixin MethodChannelAudioplayersPlatform
     implements MethodChannelAudioplayersPlatformInterface {
-  static const MethodChannel _methodChannel =
-      MethodChannel('xyz.luan/audioplayers');
-
   @override
   Future<void> create(String playerId) {
     return _call('create', playerId);
@@ -88,6 +85,9 @@ mixin MethodChannelAudioplayersPlatform
       context.toJson(),
     );
   }
+
+  @override
+  EqualizerPlatformInterface equalizer = EqualizerPlatform();
 
   @override
   Future<void> setBalance(
@@ -196,30 +196,6 @@ mixin MethodChannelAudioplayersPlatform
       },
     );
   }
-
-  Future<void> _call(
-    String method,
-    String playerId, [
-    Map<String, dynamic> arguments = const <String, dynamic>{},
-  ]) async {
-    final enhancedArgs = <String, dynamic>{
-      'playerId': playerId,
-      ...arguments,
-    };
-    return _methodChannel.call(method, enhancedArgs);
-  }
-
-  Future<T?> _compute<T>(
-    String method,
-    String playerId, [
-    Map<String, dynamic> arguments = const <String, dynamic>{},
-  ]) async {
-    final enhancedArgs = <String, dynamic>{
-      'playerId': playerId,
-      ...arguments,
-    };
-    return _methodChannel.compute<T>(method, enhancedArgs);
-  }
 }
 
 mixin EventChannelAudioplayersPlatform
@@ -283,4 +259,104 @@ mixin EventChannelAudioplayersPlatform
   Stream<AudioEvent> getEventStream(String playerId) {
     return streams[playerId]!;
   }
+}
+
+class EqualizerPlatform implements EqualizerPlatformInterface {
+  @override
+  Future<bool?> getEnabled(
+    String playerId,
+  ) async {
+    return _compute<bool>(
+      'equalizer.getEnabled',
+      playerId,
+      <String, dynamic>{},
+    );
+  }
+
+  @override
+  Future<void> setEnabled(
+    String playerId,
+    bool isEnabled,
+  ) async {
+    return _call(
+      'equalizer.setEnabled',
+      playerId,
+      <String, dynamic>{
+        'isEnabled': isEnabled,
+      },
+    );
+  }
+
+  @override
+  Future<int?> getNumberOfBands(
+    String playerId,
+  ) {
+    return _compute<int>(
+      'equalizer.getNumberOfBands',
+      playerId,
+      <String, dynamic>{},
+    );
+  }
+
+  @override
+  Future<Map?> getLimits(String playerId) {
+    return _compute<Map>(
+      'equalizer.getLimits',
+      playerId,
+      <String, dynamic>{},
+    );
+  }
+
+  @override
+  Future<Map?> getBand(String playerId, int bandIndex) {
+    return _compute<Map>(
+      'equalizer.getBand',
+      playerId,
+      <String, dynamic>{
+        'bandIndex': bandIndex,
+      },
+    );
+  }
+
+  @override
+  Future<void> setBand(
+    String playerId,
+    int bandIndex,
+    Map<String, double> band,
+  ) {
+    return _call(
+      'equalizer.setBand',
+      playerId,
+      <String, dynamic>{
+        'bandIndex': bandIndex,
+        'band': band,
+      },
+    );
+  }
+}
+
+const MethodChannel _methodChannel = MethodChannel('xyz.luan/audioplayers');
+
+Future<void> _call(
+  String method,
+  String playerId, [
+  Map<String, dynamic> arguments = const <String, dynamic>{},
+]) async {
+  final enhancedArgs = <String, dynamic>{
+    'playerId': playerId,
+    ...arguments,
+  };
+  return _methodChannel.call(method, enhancedArgs);
+}
+
+Future<T?> _compute<T>(
+  String method,
+  String playerId, [
+  Map<String, dynamic> arguments = const <String, dynamic>{},
+]) async {
+  final enhancedArgs = <String, dynamic>{
+    'playerId': playerId,
+    ...arguments,
+  };
+  return _methodChannel.compute<T>(method, enhancedArgs);
 }
