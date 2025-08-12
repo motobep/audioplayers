@@ -19,25 +19,28 @@ class FocusManager(
         get() = player.audioManager
 
     fun maybeRequestAudioFocus(andThen: () -> Unit) {
-        if (context.audioFocus == AudioManager.AUDIOFOCUS_NONE) {
+        println("maybeRequestAudioFocus");
+        andThen()
+        /* if (context.audioFocus == AudioManager.AUDIOFOCUS_NONE) {
             andThen()
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             newRequestAudioFocus(andThen)
         } else {
             @Suppress("DEPRECATION")
             oldRequestAudioFocus(andThen)
-        }
+        } */
     }
 
     fun handleStop() {
-        if (context.audioFocus != AudioManager.AUDIOFOCUS_NONE) {
+        println("handleStop");
+        /* if (context.audioFocus != AudioManager.AUDIOFOCUS_NONE) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 audioFocusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
             } else {
                 @Suppress("DEPRECATION")
                 audioManager.abandonAudioFocus(audioFocusChangeListener)
             }
-        }
+        } */
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
