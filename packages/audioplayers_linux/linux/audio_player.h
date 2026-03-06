@@ -16,11 +16,21 @@
 #include <sstream>
 #include <string>
 
+#include <cassert>
+
+#define assertm(exp, msg) assert((void(msg), exp))
+
 extern "C" {
+#include <gst/app/gstappsrc.h>
 #include <gst/gst.h>
 }
 
 #define __AUDIO_PLAYER_NUM_BUNDS 10
+
+typedef enum {
+  SRC_STATE_APP = 0,
+  SRC_STATE_URI = 1,
+} SrcState;
 
 class AudioPlayer {
  public:
@@ -64,6 +74,12 @@ class AudioPlayer {
 
   void SetSourceUrl(std::string url);
 
+  void SetSourceByteStream();
+
+  int64_t PushBuffer(const guint8* buffer, ssize_t len);
+
+  void FlushBuffers();
+
   void ReleaseMediaSource();
 
   void OnError(const gchar* code,
@@ -75,15 +91,20 @@ class AudioPlayer {
 
   virtual ~AudioPlayer();
 
+  std::string http_proxy{};
+
  private:
   // Gst members
-  GstElement* playbin = nullptr;
-  GstElement* source = nullptr;
+  GstElement* pipeline;
+  GstElement* appsrc;
+  GstElement* app_decodebin;
+  GstElement* uridecodebin;
+  GstElement* audioconvert;
+  GstElement* audioresample;
+  GstElement* volume_elem;
   GstElement* equalizer = nullptr;
   GstElement* panorama = nullptr;
-  GstElement* audiobin = nullptr;
   GstElement* audiosink = nullptr;
-  GstPad* sinkPad = nullptr;
   GstBus* bus = nullptr;
 
   bool _isInitialized = false;
@@ -104,11 +125,6 @@ class AudioPlayer {
   FlValue* _bandMap = fl_value_new_map();
   FlValue* _limitsMap = fl_value_new_map();
   bool _isEnabled = true;
-
-
-  static void SourceSetup(GstElement* playbin,
-                          GstElement* source,
-                          GstElement** p_src);
 
   static gboolean OnBusMessage(GstBus* bus,
                                GstMessage* message,
@@ -137,4 +153,8 @@ class AudioPlayer {
   void SetGain(int bandIndex, float value);
   void SetBandwidth(int bandIndex, float value);
   void SetFrequency(int bandIndex, float value);
+
+  GstStateChangeReturn SetPipelineState(GstState state);
+
+  SrcState GetSrcState();
 };

@@ -77,3 +77,12 @@ class BytesSource extends Source {
     return player.setSourceBytes(bytes);
   }
 }
+
+class ByteStreamSource extends Source {
+  ByteStreamSource();
+
+  @override
+  Future<void> setOnPlayer(AudioPlayer player) {
+    return player.setSourceByteStream();
+  }
+}

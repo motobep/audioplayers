@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:audioplayers_platform_interface/src/api/audio_context.dart';
 import 'package:audioplayers_platform_interface/src/api/audio_event.dart';
@@ -142,6 +143,47 @@ mixin MethodChannelAudioplayersPlatform
       playerId,
       <String, dynamic>{
         'bytes': bytes,
+      },
+    );
+  }
+
+  @override
+  Future<void> setSourceByteStream(String playerId) {
+    return _call(
+      'setSourceByteStream',
+      playerId,
+      <String, dynamic>{},
+    );
+  }
+
+  @override
+  Future<int?> pushBuffer(String playerId, List<int> buffer, int len) {
+    return _compute<int>(
+      'pushBuffer',
+      playerId,
+      <String, dynamic>{
+        'buffer': Uint8List.fromList(buffer),
+        'len': len,
+      },
+    );
+  }
+
+  @override
+  Future<void> flushBuffers(String playerId) {
+    return _call(
+      'flushBuffers',
+      playerId,
+      <String, dynamic>{},
+    );
+  }
+
+  @override
+  Future<void> setHttpProxy(String playerId, String http_proxy) {
+    return _call(
+      'setHttpProxy',
+      playerId,
+      <String, dynamic>{
+        'http_proxy': http_proxy,
       },
     );
   }

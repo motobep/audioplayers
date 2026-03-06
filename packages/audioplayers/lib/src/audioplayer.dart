@@ -377,6 +377,26 @@ class AudioPlayer {
     );
   }
 
+  Future<void> setSourceByteStream() async {
+    _source = ByteStreamSource();
+    await creatingCompleter.future;
+    await _completePrepared(
+      () => _platform.setSourceByteStream(playerId),
+    );
+  }
+
+  Future<int> pushBuffer(List<int> buffer) async {
+    return (await _platform.pushBuffer(playerId, buffer, buffer.length))!;
+  }
+
+  Future<void> flushBuffers() async {
+    return (await _platform.flushBuffers(playerId));
+  }
+
+  Future<void> setHttpProxy(String http_proxy) async {
+    return (await _platform.setHttpProxy(playerId, http_proxy));
+  }
+
   /// Get audio duration after setting url.
   /// Use it in conjunction with setUrl.
   ///

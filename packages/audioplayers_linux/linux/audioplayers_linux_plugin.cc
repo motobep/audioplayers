@@ -132,7 +132,20 @@ static void audioplayers_linux_plugin_handle_method_call(
   FlValue* result = nullptr;
 
   try {
-    if (strcmp(method, "pause") == 0) {
+    if (strcmp(method, "setHttpProxy") == 0) {
+      printf("setHttpProxy\n");
+      auto flHttpProxy = fl_value_lookup_string(args, "http_proxy");
+      if (flHttpProxy == nullptr) {
+        response = FL_METHOD_RESPONSE(fl_method_error_response_new(
+            "LinuxAudioError", "Null http_proxy received on setHttpProxy.",
+            nullptr));
+        fl_method_call_respond(method_call, response, nullptr);
+        return;
+      }
+      auto http_proxy = std::string(fl_value_get_string(flHttpProxy));
+      printf("http_proxy: %s\n", http_proxy.c_str());
+      player->http_proxy = http_proxy;
+    } else if (strcmp(method, "pause") == 0) {
       player->Pause();
     } else if (strcmp(method, "resume") == 0) {
       player->Resume();
@@ -164,6 +177,25 @@ static void audioplayers_linux_plugin_handle_method_call(
         url = std::string("file://") + url;
       }
       player->SetSourceUrl(url);
+    } else if (strcmp(method, "setSourceByteStream") == 0) {
+      player->SetSourceByteStream();
+    } else if (strcmp(method, "pushBuffer") == 0) {
+      auto flBuffer = fl_value_lookup_string(args, "buffer");
+      if (flBuffer == nullptr) {
+        throw "pushBuffer(): Bad buffer value";
+      }
+      const guint8* buffer = fl_value_get_uint8_list(flBuffer);
+
+      auto flLen = fl_value_lookup_string(args, "len");
+      if (flLen == nullptr) {
+        throw "pushBuffer(): Bad len value";
+      }
+      int64_t len = fl_value_get_int(flLen);
+
+      int64_t ok = player->PushBuffer(buffer, len);
+      result = fl_value_new_int(ok);
+    } else if (strcmp(method, "flushBuffers") == 0) {
+      player->FlushBuffers();
     } else if (strcmp(method, "getDuration") == 0) {
       auto optDuration = player->GetDuration();
       result = optDuration.has_value() ? fl_value_new_int(optDuration.value())

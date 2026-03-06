@@ -106,6 +106,14 @@ abstract class MethodChannelAudioplayersPlatformInterface {
     Uint8List bytes,
   );
 
+  Future<void> setSourceByteStream(
+    String playerId,
+  );
+
+  Future<int?> pushBuffer(String playerId, List<int> buffer, int len);
+  Future<void> flushBuffers(String playerId);
+  Future<void> setHttpProxy(String playerId, String http_proxy);
+
   Future<void> setAudioContext(
     String playerId,
     AudioContext audioContext,
