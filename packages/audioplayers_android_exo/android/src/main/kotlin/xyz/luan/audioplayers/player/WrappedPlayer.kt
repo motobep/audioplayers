@@ -1,5 +1,6 @@
 package xyz.luan.audioplayers.player
 
+import xyz.luan.audioplayers.Logger
 import android.content.Context
 import android.media.AudioManager
 import xyz.luan.audioplayers.AudioContextAndroid
@@ -24,13 +25,13 @@ class WrappedPlayer internal constructor(
 
     var source: Source? = null
         set(value) {
-            println("WrappedPlayer: source = $value")
+            logger.blue("source = $value")
             if (field != value) {
                 field = value
                 prepared = false
                 if (value != null) {
                     released = false
-                    println("WrappedPlayer: setSource($value)")
+                    logger.blue("setSource($value)")
                     player?.setSource(value)
                     player?.configAndPrepare()
                 } else {
@@ -121,7 +122,7 @@ class WrappedPlayer internal constructor(
     ) */
 
     fun updateAudioContext(audioContext: AudioContextAndroid) {
-        println("WrappedPlayer: updateAudioContext()")
+        logger.log("updateAudioContext()")
         if (context == audioContext) {
             return
         }
@@ -154,7 +155,7 @@ class WrappedPlayer internal constructor(
      * Returns the duration of the media in milliseconds, if available.
      */
     fun getDuration(): Int? {
-        println("WrappedPlayer: getDuration(): playing=$playing, released=$released, prepared=$prepared")
+        logger.blue("getDuration(): playing=$playing, released=$released, prepared=$prepared")
         return if (prepared) player?.getDuration() else null
     }
 
@@ -175,11 +176,11 @@ class WrappedPlayer internal constructor(
      * Playback handling methods
      */
     fun resume() {
-        println("WrappedPlayer: resume(): playing=$playing, released=$released, prepared=$prepared")
+        logger.blue("resume(): playing=$playing, released=$released, prepared=$prepared")
         if (!playing && !released) {
             playing = true
             if (prepared) {
-                println("WrappedPlayer: resume() -> start()")
+                logger.blue("resume() -> start()")
                 start()
             }
         }
@@ -193,7 +194,7 @@ class WrappedPlayer internal constructor(
     // private fun requestFocusAndStart() ...
 
     fun stop() {
-        println("WrappedPlayer: stop()")
+        logger.log("stop()")
         focusManager.handleStop()
         if (released) {
             return
@@ -209,7 +210,7 @@ class WrappedPlayer internal constructor(
     }
 
     fun release() {
-        println("WrappedPlayer: release()")
+        logger.log("release()")
         focusManager.handleStop()
         if (released) {
             return
@@ -224,7 +225,7 @@ class WrappedPlayer internal constructor(
     }
 
     fun pause() {
-        println("WrappedPlayer: pause(): playing=$playing, released=$released, prepared=$prepared")
+        logger.log("pause(): playing=$playing, released=$released, prepared=$prepared")
         if (!playing) return
         playing = false
         if (prepared) {
@@ -247,7 +248,7 @@ class WrappedPlayer internal constructor(
      * Player callbacks
      */
     fun onPrepared() {
-        println("WrappedPlayer: onPrepared")
+        logger.log("onPrepared")
         prepared = true
         ref.handleDuration(this)
         if (playing) {
@@ -259,7 +260,7 @@ class WrappedPlayer internal constructor(
     }
 
     fun onCompletion() {
-        println("WrappedPlayer: onCompletion. releaseMode=$releaseMode")
+        logger.log("onCompletion. releaseMode=$releaseMode")
         if (releaseMode != ReleaseMode.LOOP) {
             stop()
         }
@@ -295,7 +296,7 @@ class WrappedPlayer internal constructor(
     }
 
     private fun PlayerWrapper.configAndPrepare() {
-        println("WrappedPlayer: configAndPrepare()")
+        logger.log("configAndPrepare()")
         setVolumeAndBalance(volume, balance)
         setLooping(isLooping)
         prepare()
@@ -308,10 +309,12 @@ class WrappedPlayer internal constructor(
     }
 
     fun dispose() {
-        println("WrappedPlayer: dispose()")
+        logger.log("dispose()")
         release()
         player?.dispose()
         player = null
         eventHandler.dispose()
     }
 }
+
+private val logger = Logger("WrappedPlayer: ")

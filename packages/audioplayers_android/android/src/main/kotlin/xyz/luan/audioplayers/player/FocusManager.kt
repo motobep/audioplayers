@@ -19,7 +19,7 @@ class FocusManager(
         get() = player.audioManager
 
     fun maybeRequestAudioFocus(andThen: () -> Unit) {
-        println("maybeRequestAudioFocus andThen");
+        println("FocusManager: maybeRequestAudioFocus andThen");
         andThen()
         /* if (context.audioFocus == AudioManager.AUDIOFOCUS_NONE) {
             andThen()
@@ -32,7 +32,7 @@ class FocusManager(
     }
 
     fun handleStop() {
-        println("handleStop pass");
+        println("FocusManager: handleStop pass");
         /* if (context.audioFocus != AudioManager.AUDIOFOCUS_NONE) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 audioFocusRequest?.let { audioManager.abandonAudioFocusRequest(it) }

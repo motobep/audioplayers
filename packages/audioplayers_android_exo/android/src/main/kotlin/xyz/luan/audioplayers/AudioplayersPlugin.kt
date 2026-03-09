@@ -30,7 +30,7 @@ class AudioplayersPlugin : FlutterPlugin {
     private var defaultAudioContext = AudioContextAndroid()
 
     override fun onAttachedToEngine(binding: FlutterPluginBinding) {
-        println("Exo player: onAttachedToEngine")
+        logger.log("Exo player: onAttachedToEngine")
         context = binding.applicationContext
         binaryMessenger = binding.binaryMessenger
         methods = MethodChannel(binding.binaryMessenger, "xyz.luan/audioplayers")
@@ -94,7 +94,7 @@ class AudioplayersPlugin : FlutterPlugin {
     }
 
     private fun methodHandler(call: MethodCall, response: MethodChannel.Result) {
-        println("Plugin player: methodHandler '${call.method}'")
+        logger.log("methodHandler '${call.method}'")
         val playerId = call.argument<String>("playerId") ?: return
         if (call.method == "create") {
             val eventHandler = EventHandler(EventChannel(binaryMessenger, "xyz.luan/audioplayers/events/$playerId"))
@@ -109,10 +109,10 @@ class AudioplayersPlugin : FlutterPlugin {
                     val url = call.argument<String>("url") ?: error("url is required")
                     val isLocal = call.argument<Boolean>("isLocal") ?: false
                     try {
-                        println(">>> Plugin player: setsourceUrl (${isLocal}, ${url})")
+                        logger.blue(">>> Plugin player: setsourceUrl (${isLocal}, ${url})")
                         player.source = UrlSource(url, isLocal)
                     } catch (e: FileNotFoundException) {
-                        println("setSourceUrl: Exception")
+                        logger.error("setSourceUrl: Exception")
                         response.error(
                             "AndroidAudioError",
                             "Failed to set source. For troubleshooting, see: " +
@@ -121,7 +121,13 @@ class AudioplayersPlugin : FlutterPlugin {
                         )
                         return
                     }
-                    println("<<< Plugin player: set url (${isLocal}, ${url})")
+                    logger.blue("<<< Plugin player: set url (${isLocal}, ${url})")
+                }
+
+                "setHttpProxy" -> {
+                    logger.warn("Unimplemented: setHttpProxy")
+                    val http_proxy = call.argument<String>("http_proxy") ?: error("http_proxy required")
+                    logger.log("Got http_proxy=$http_proxy")
                 }
 
                 "setSourceBytes" -> {
@@ -132,12 +138,11 @@ class AudioplayersPlugin : FlutterPlugin {
                     player.source = BytesSource(bytes)
                 }
                 "setSourceByteStream" -> {
-                    println("---> setSourceByteStream")
+                    logger.log("setSourceByteStream")
                     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
                         error("Operation not supported on Android <= M")
                     }
                     player.source = ByteStreamSource()
-                    println("<--- setSourceByteStream")
                 }
                 "pushBuffer" -> {
                     val buffer = call.argument<ByteArray>("buffer") ?: error("buffer is required")
@@ -159,6 +164,38 @@ class AudioplayersPlugin : FlutterPlugin {
                 "setVolume" -> {
                     val volume = call.argument<Double>("volume") ?: error("volume is required")
                     player.volume = volume.toFloat()
+                }
+
+                "equalizer.getEnabled" -> {
+                    response.success(player.player!!.getEqEnabled())
+                    return
+                }
+
+                "equalizer.setEnabled" -> {
+                    val isEnabled = call.argument<Boolean>("isEnabled") ?: error("isEnabled is required")
+                    player.player!!.setEqEnabled(isEnabled)
+                }
+
+                "equalizer.getNumberOfBands" -> {
+                    response.success(player.player!!.getEqNumberOfBands())
+                    return
+                }
+
+                "equalizer.getLimits" -> {
+                    response.success(player.player!!.getEqLimits())
+                    return
+                }
+
+                "equalizer.getBand" -> {
+                    val bandIndex = call.argument<Int>("bandIndex")?.toShort() ?: error("bandIndex is required")
+                    response.success(player.player!!.getEqBand(bandIndex))
+                    return
+                }
+
+                "equalizer.setBand" -> {
+                    val bandIndex = call.argument<Int>("bandIndex")?.toShort() ?: error("bandIndex is required")
+                    val band = call.argument<Map<String, Float>>("band") ?: error("band is required")
+                    player.player!!.setEqBand(bandIndex, band)
                 }
 
                 "setBalance" -> {
@@ -223,12 +260,10 @@ class AudioplayersPlugin : FlutterPlugin {
                     return
                 }
             }
-            println("<<< return success")
             response.success(1)
         } catch (e: Exception) {
             response.error("AndroidAudioError", e.message, e)
         }
-        println("Plugin player: methodHandler: return")
     }
 
     private fun getPlayer(playerId: String): WrappedPlayer {
@@ -330,3 +365,5 @@ class EventHandler(private val eventChannel: EventChannel) : EventChannel.Stream
         eventChannel.setStreamHandler(null)
     }
 }
+
+private val logger = Logger("AudioplayersPlugin: ")

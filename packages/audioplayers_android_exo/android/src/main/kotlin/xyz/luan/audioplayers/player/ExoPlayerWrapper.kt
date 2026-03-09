@@ -1,5 +1,6 @@
 package xyz.luan.audioplayers.player
 
+import xyz.luan.audioplayers.Logger
 import android.content.Context
 import android.net.Uri
 import android.os.Build
@@ -30,6 +31,7 @@ import xyz.luan.audioplayers.source.Source
 import xyz.luan.audioplayers.source.UrlSource
 import java.nio.ByteBuffer
 import java.util.concurrent.LinkedBlockingQueue
+import android.media.audiofx.Equalizer
 
 class ExoPlayerWrapper(
     private val wrappedPlayer: WrappedPlayer,
@@ -38,7 +40,7 @@ class ExoPlayerWrapper(
 
     class ExoPlayerListener(private val wrappedPlayer: WrappedPlayer) : androidx.media3.common.Player.Listener {
         override fun onPlayerError(error: PlaybackException) {
-            println("onPlayerError: $error")
+            logger.error("onPlayerError: $error")
             if (error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED ||
                 error.errorCode == PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND
             ) {
@@ -58,7 +60,7 @@ class ExoPlayerWrapper(
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
-            println("onPlaybackStateChanged: $playbackState")
+            logger.log("onPlaybackStateChanged: $playbackState")
             when (playbackState) {
                 Player.STATE_IDLE -> {} // TODO(gustl22): may can use or leave as no-op
                 Player.STATE_BUFFERING -> wrappedPlayer.onBuffering(0)
@@ -69,6 +71,7 @@ class ExoPlayerWrapper(
     }
 
     private var player: ExoPlayer
+    private lateinit var equalizer: Equalizer
 
     @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     private var channelMixingAudioProcessor = AdaptiveChannelMixingAudioProcessor()
@@ -77,7 +80,33 @@ class ExoPlayerWrapper(
     private val buffersQueue = LinkedBlockingQueue<ByteArray>(50)
 
     init {
+        logger.log("init")
         player = createPlayer(appContext)
+
+        logger.log("getAudioSessionId()")
+        val audioSessionId = player.getAudioSessionId()
+        if (audioSessionId != 0) {
+            logger.blue("try")
+            try {
+                logger.log("audioSessionId: ${audioSessionId}")
+                equalizer = Equalizer(0, audioSessionId)
+                equalizer?.enabled = true
+            } catch (e: Exception) {
+                logger.error("e: $e")
+                e.printStackTrace()
+            }
+        } else {
+            player.addListener(object : Player.Listener {
+                override fun onAudioSessionIdChanged(sessionId: Int) {
+                    logger.blue("onAudioSessionIdChanged: $sessionId")
+                    if (sessionId != 0) {
+                        logger.blue("make equalizer")
+                        equalizer = Equalizer(0, sessionId)
+                        equalizer?.enabled = true
+                    }
+                }
+            })
+        }
     }
 
     @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
@@ -111,18 +140,64 @@ class ExoPlayerWrapper(
         return player.currentPosition.toInt()
     }
 
+    /**
+     * Equalizer methods
+     */
+    override fun getEqEnabled(): Boolean {
+        return equalizer.getEnabled()
+    }
+
+    override fun setEqEnabled(isEnabled: Boolean) {
+        equalizer.setEnabled(isEnabled)
+    }
+
+    override fun getEqNumberOfBands(): Short {
+        return equalizer.getNumberOfBands()
+    }
+
+    override fun getEqLimits(): Map<String, List<Float>> {
+        val range = equalizer.getBandLevelRange().map { it / 100.0f } // milli -> dB
+
+        return mapOf(
+            "gain" to range,
+            "bandwidth" to listOf(),
+            "frequency" to listOf(),
+        )
+    }
+
+    override fun getEqBand(bandIndex: Short): Map<String, Float> {
+        val gainMilliB = equalizer.getBandLevel(bandIndex) // milli Bel
+        val gain: Float = gainMilliB / 100.0f // dB
+
+        val freqRange = equalizer.getBandFreqRange(bandIndex)
+        val bandwidth: Float = (freqRange[1] - freqRange[0]) / 1000.0f // milli -> Hz
+
+        val freq: Float = equalizer.getCenterFreq(bandIndex) / 1000.0f // milli -> Hz
+
+        return mapOf("gain" to gain, "bandwidth" to bandwidth, "frequency" to freq)
+    }
+
+    override fun setEqBand(bandIndex: Short, band: Map<String, Float>) {
+        val gainMilliB: Short = (band["gain"]!! * 100).toInt().toShort()
+        equalizer.setBandLevel(bandIndex, gainMilliB)
+    }
+
+    /**
+     * End Equalizer methods
+     */
+
     override fun start() {
-        println("Exo player: start()")
+        logger.log("start()")
         player.play()
     }
 
     override fun pause() {
-        println("Exo player: pause()")
+        logger.log("pause()")
         player.pause()
     }
 
     override fun stop() {
-        println("Exo player: stop()")
+        logger.log("stop()")
         player.pause()
         player.seekTo(0)
     }
@@ -133,13 +208,13 @@ class ExoPlayerWrapper(
     }
 
     override fun release() {
-        println("Exo player: release()")
+        logger.log("release()")
         player.stop()
         player.clearMediaItems()
     }
 
     override fun dispose() {
-        println("Exo player: dispose()")
+        logger.log("dispose()")
         release()
         player.release()
     }
@@ -177,7 +252,7 @@ class ExoPlayerWrapper(
     @RequiresApi(Build.VERSION_CODES.M)
     @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     override fun setSource(source: Source) {
-        println("Exo player: setSource($source)")
+        logger.blue("Exo player: setSource($source)")
         player.clearMediaItems()
         if (source is UrlSource) {
             player.setMediaItem(MediaItem.fromUri(source.url))
@@ -193,11 +268,9 @@ class ExoPlayerWrapper(
             val factory = DataSource.Factory { source as DataSource }
             val mediaSource = ProgressiveMediaSource.Factory(factory)
                 .createMediaSource(MediaItem.fromUri("stream://local"))
-            println(">>> Exo player: setMediaSource()")
             player.setMediaSource(mediaSource)
-            println("<<< Exo player: setMediaSource()")
             // TODO: signal on byteStreamSource prepared (or just prepared?)
-            println("ExoPlayer (ByteStreamSource): signaling onPrepared")
+            logger.warn("ExoPlayer (ByteStreamSource): signaling onPrepared")
             wrappedPlayer.onPrepared()
         }
     }
@@ -207,12 +280,12 @@ class ExoPlayerWrapper(
     }
 
     override fun pushBuffer(buffer: ByteArray) {
-        println("pushBuffer")
+        logger.log("pushBuffer")
         buffersQueue.put(buffer)
     }
 
     override fun flushBuffers() {
-        println("flushBuffers")
+        logger.log("flushBuffers")
         buffersQueue.clear()
         player!!.seekTo(0)
     }
@@ -285,3 +358,5 @@ class AdaptiveChannelMixingAudioProcessor : BaseAudioProcessor() {
         outputBuffer.flip()
     }
 }
+
+private val logger = Logger("ExoPlayerWrapper: ")

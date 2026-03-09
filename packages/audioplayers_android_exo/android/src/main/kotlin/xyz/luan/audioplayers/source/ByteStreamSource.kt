@@ -1,7 +1,7 @@
 package xyz.luan.audioplayers.source
 
+import xyz.luan.audioplayers.Logger
 import android.net.Uri
-import android.util.Log
 import androidx.media3.common.C
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
@@ -21,33 +21,31 @@ class ByteStreamSource() : DataSource, Source {
     private val transferListeners = mutableListOf<TransferListener>()
     private var openedUri: Uri? = null
 
-    private val TAG = "STREAMING.ByteStreamSource"
-
     override fun open(dataSpec: DataSpec): Long {
-        Log.d(TAG, "open(). uri=${dataSpec.uri}")
+        logger.blue("open(). uri=${dataSpec.uri}")
         opened = true
         openedUri = dataSpec.uri
         var len = C.LENGTH_UNSET.toLong()
-        Log.d(TAG, "len: ${len}")
+        logger.blue("len: ${len}")
         return len
     }
 
     @Synchronized
     @Throws(IOException::class)
     override fun read(target: ByteArray, offset: Int, length: Int): Int {
-        // Log.d(TAG, "Read")
+        // logger.log("Read")
         if (!opened) throw IOException("Not opened")
         while (currentBuffer == null || bufferPos >= currentBuffer!!.size) {
             var next: ByteArray
             try {
-                Log.d(TAG, "----- Take Buffer -----")
+                logger.warn("----- Take Buffer -----")
                 next = buffersQueue.take()
-                Log.d(TAG, "size=${next.size}")
+                logger.log("size=${next.size}")
             } catch (e: InterruptedException) {
-                Log.e(TAG, "InterruptedException. Sending end of input")
+                logger.error( "InterruptedException. Sending end of input")
                 return C.RESULT_END_OF_INPUT
             } catch (e: Exception) {
-                Log.e(TAG, "Exception. Sending end of input")
+                logger.error( "Exception. Sending end of input")
                 return C.RESULT_END_OF_INPUT
             }
             if (next.isEmpty()) return C.RESULT_END_OF_INPUT
@@ -64,7 +62,7 @@ class ByteStreamSource() : DataSource, Source {
     override fun getUri(): Uri? = openedUri
 
     override fun close() {
-        Log.d(TAG, "close()")
+        logger.blue("close()")
         opened = false
         currentBuffer = null
         bufferPos = 0
@@ -73,7 +71,9 @@ class ByteStreamSource() : DataSource, Source {
 
     // Required by DataSource interface:
     override fun addTransferListener(transferListener: TransferListener) {
-        Log.d(TAG, "addTransferListener")
+        logger.blue("addTransferListener")
         synchronized(transferListeners) { transferListeners.add(transferListener) }
     }
 }
+
+private val logger = Logger("ByteStreamSource: ")
