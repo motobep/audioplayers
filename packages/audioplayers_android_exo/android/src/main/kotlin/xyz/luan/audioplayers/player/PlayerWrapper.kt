@@ -21,4 +21,7 @@ interface PlayerWrapper {
     fun prepare()
     fun release()
     fun dispose()
+
+    fun pushBuffer(buffer: ByteArray)
+    fun flushBuffers()
 }

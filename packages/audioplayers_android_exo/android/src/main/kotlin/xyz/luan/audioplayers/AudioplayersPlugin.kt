@@ -11,6 +11,7 @@ import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import xyz.luan.audioplayers.player.WrappedPlayer
+import xyz.luan.audioplayers.source.ByteStreamSource
 import xyz.luan.audioplayers.source.BytesSource
 import xyz.luan.audioplayers.source.UrlSource
 import java.io.FileNotFoundException
@@ -93,7 +94,7 @@ class AudioplayersPlugin : FlutterPlugin {
     }
 
     private fun methodHandler(call: MethodCall, response: MethodChannel.Result) {
-        println("Exo player: methodHandler '${call.method}'")
+        println("Plugin player: methodHandler '${call.method}'")
         val playerId = call.argument<String>("playerId") ?: return
         if (call.method == "create") {
             val eventHandler = EventHandler(EventChannel(binaryMessenger, "xyz.luan/audioplayers/events/$playerId"))
@@ -108,8 +109,10 @@ class AudioplayersPlugin : FlutterPlugin {
                     val url = call.argument<String>("url") ?: error("url is required")
                     val isLocal = call.argument<Boolean>("isLocal") ?: false
                     try {
+                        println(">>> Plugin player: setsourceUrl (${isLocal}, ${url})")
                         player.source = UrlSource(url, isLocal)
                     } catch (e: FileNotFoundException) {
+                        println("setSourceUrl: Exception")
                         response.error(
                             "AndroidAudioError",
                             "Failed to set source. For troubleshooting, see: " +
@@ -118,7 +121,7 @@ class AudioplayersPlugin : FlutterPlugin {
                         )
                         return
                     }
-                    println("Exo player: set url (${isLocal}, ${url})")
+                    println("<<< Plugin player: set url (${isLocal}, ${url})")
                 }
 
                 "setSourceBytes" -> {
@@ -127,6 +130,21 @@ class AudioplayersPlugin : FlutterPlugin {
                         error("Operation not supported on Android <= M")
                     }
                     player.source = BytesSource(bytes)
+                }
+                "setSourceByteStream" -> {
+                    println("---> setSourceByteStream")
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+                        error("Operation not supported on Android <= M")
+                    }
+                    player.source = ByteStreamSource()
+                    println("<--- setSourceByteStream")
+                }
+                "pushBuffer" -> {
+                    val buffer = call.argument<ByteArray>("buffer") ?: error("buffer is required")
+                    player.player!!.pushBuffer(buffer)
+                }
+                "flushBuffers" -> {
+                    player.player!!.flushBuffers()
                 }
 
                 "resume" -> player.resume()
@@ -205,10 +223,12 @@ class AudioplayersPlugin : FlutterPlugin {
                     return
                 }
             }
+            println("<<< return success")
             response.success(1)
         } catch (e: Exception) {
             response.error("AndroidAudioError", e.message, e)
         }
+        println("Plugin player: methodHandler: return")
     }
 
     private fun getPlayer(playerId: String): WrappedPlayer {

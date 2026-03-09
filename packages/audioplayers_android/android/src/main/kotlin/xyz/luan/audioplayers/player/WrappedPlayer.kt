@@ -223,7 +223,8 @@ class WrappedPlayer internal constructor(
      * Playback handling methods
      */
     fun play() {
-        focusManager.maybeRequestAudioFocus(andThen = ::actuallyPlay)
+        actuallyPlay()
+        // focusManager.maybeRequestAudioFocus(andThen = ::actuallyPlay)
     }
 
     private fun actuallyPlay() {

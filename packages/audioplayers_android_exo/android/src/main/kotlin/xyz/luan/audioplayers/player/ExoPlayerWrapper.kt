@@ -24,10 +24,12 @@ import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import xyz.luan.audioplayers.AudioContextAndroid
+import xyz.luan.audioplayers.source.ByteStreamSource
 import xyz.luan.audioplayers.source.BytesSource
 import xyz.luan.audioplayers.source.Source
 import xyz.luan.audioplayers.source.UrlSource
 import java.nio.ByteBuffer
+import java.util.concurrent.LinkedBlockingQueue
 
 class ExoPlayerWrapper(
     private val wrappedPlayer: WrappedPlayer,
@@ -36,13 +38,14 @@ class ExoPlayerWrapper(
 
     class ExoPlayerListener(private val wrappedPlayer: WrappedPlayer) : androidx.media3.common.Player.Listener {
         override fun onPlayerError(error: PlaybackException) {
+            println("onPlayerError: $error")
             if (error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED ||
                 error.errorCode == PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND
             ) {
                 wrappedPlayer.handleError(
                     errorCode = "AndroidAudioError",
                     errorMessage = "Failed to set source. For troubleshooting, see: " +
-                        "https://github.com/bluefireteam/audioplayers/blob/main/troubleshooting.md",
+                            "https://github.com/bluefireteam/audioplayers/blob/main/troubleshooting.md",
                     errorDetails = "${error.errorCodeName}\n${error.message}\n${error.stackTraceToString()}",
                 )
                 return
@@ -55,6 +58,7 @@ class ExoPlayerWrapper(
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
+            println("onPlaybackStateChanged: $playbackState")
             when (playbackState) {
                 Player.STATE_IDLE -> {} // TODO(gustl22): may can use or leave as no-op
                 Player.STATE_BUFFERING -> wrappedPlayer.onBuffering(0)
@@ -69,6 +73,8 @@ class ExoPlayerWrapper(
     @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     private var channelMixingAudioProcessor = AdaptiveChannelMixingAudioProcessor()
     private lateinit var audioSink: AudioSink
+
+    private val buffersQueue = LinkedBlockingQueue<ByteArray>(50)
 
     init {
         player = createPlayer(appContext)
@@ -116,6 +122,7 @@ class ExoPlayerWrapper(
     }
 
     override fun stop() {
+        println("Exo player: stop()")
         player.pause()
         player.seekTo(0)
     }
@@ -126,11 +133,13 @@ class ExoPlayerWrapper(
     }
 
     override fun release() {
+        println("Exo player: release()")
         player.stop()
         player.clearMediaItems()
     }
 
     override fun dispose() {
+        println("Exo player: dispose()")
         release()
         player.release()
     }
@@ -168,6 +177,7 @@ class ExoPlayerWrapper(
     @RequiresApi(Build.VERSION_CODES.M)
     @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     override fun setSource(source: Source) {
+        println("Exo player: setSource($source)")
         player.clearMediaItems()
         if (source is UrlSource) {
             player.setMediaItem(MediaItem.fromUri(source.url))
@@ -178,11 +188,33 @@ class ExoPlayerWrapper(
                 MediaItem.fromUri(Uri.EMPTY),
             )
             player.setMediaSource(mediaSource)
+        } else if (source is ByteStreamSource) {
+            source.buffersQueue = buffersQueue
+            val factory = DataSource.Factory { source as DataSource }
+            val mediaSource = ProgressiveMediaSource.Factory(factory)
+                .createMediaSource(MediaItem.fromUri("stream://local"))
+            println(">>> Exo player: setMediaSource()")
+            player.setMediaSource(mediaSource)
+            println("<<< Exo player: setMediaSource()")
+            // TODO: signal on byteStreamSource prepared (or just prepared?)
+            println("ExoPlayer (ByteStreamSource): signaling onPrepared")
+            wrappedPlayer.onPrepared()
         }
     }
 
     override fun prepare() {
         player.prepare()
+    }
+
+    override fun pushBuffer(buffer: ByteArray) {
+        println("pushBuffer")
+        buffersQueue.put(buffer)
+    }
+
+    override fun flushBuffers() {
+        println("flushBuffers")
+        buffersQueue.clear()
+        player!!.seekTo(0)
     }
 }
 

@@ -380,6 +380,7 @@ class AudioPlayer {
   Future<void> setSourceByteStream() async {
     _source = ByteStreamSource();
     await creatingCompleter.future;
+    // TODO: listen for on ByteStreamSource prepared (or just prepared?)
     await _completePrepared(
       () => _platform.setSourceByteStream(playerId),
     );

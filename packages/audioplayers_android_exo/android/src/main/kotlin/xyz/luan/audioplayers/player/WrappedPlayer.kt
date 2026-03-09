@@ -14,20 +14,23 @@ class WrappedPlayer internal constructor(
     val eventHandler: EventHandler,
     var context: AudioContextAndroid,
 ) {
-    private var player: PlayerWrapper? = null
+    var player: PlayerWrapper? = null
 
     init {
         createPlayer().also {
             player = it
         }
     }
+
     var source: Source? = null
         set(value) {
+            println("WrappedPlayer: source = $value")
             if (field != value) {
                 field = value
                 prepared = false
                 if (value != null) {
                     released = false
+                    println("WrappedPlayer: setSource($value)")
                     player?.setSource(value)
                     player?.configAndPrepare()
                 } else {
@@ -70,7 +73,8 @@ class WrappedPlayer internal constructor(
             }
         }
 
-    var releaseMode = ReleaseMode.RELEASE
+    // var releaseMode = ReleaseMode.RELEASE
+    var releaseMode = ReleaseMode.STOP
         set(value) {
             if (field != value) {
                 field = value
@@ -117,6 +121,7 @@ class WrappedPlayer internal constructor(
     ) */
 
     fun updateAudioContext(audioContext: AudioContextAndroid) {
+        println("WrappedPlayer: updateAudioContext()")
         if (context == audioContext) {
             return
         }
@@ -149,7 +154,7 @@ class WrappedPlayer internal constructor(
      * Returns the duration of the media in milliseconds, if available.
      */
     fun getDuration(): Int? {
-        println("Exo player: getDuration")
+        println("WrappedPlayer: getDuration(): playing=$playing, released=$released, prepared=$prepared")
         return if (prepared) player?.getDuration() else null
     }
 
@@ -170,29 +175,25 @@ class WrappedPlayer internal constructor(
      * Playback handling methods
      */
     fun resume() {
-        println("Exo player: resume()")
+        println("WrappedPlayer: resume(): playing=$playing, released=$released, prepared=$prepared")
         if (!playing && !released) {
             playing = true
             if (prepared) {
-                requestFocusAndStart()
+                println("WrappedPlayer: resume() -> start()")
+                start()
             }
         }
-        if (prepared) {
-            println("Exo player: resume() -> start()")
-            player?.start()
-        }
+    }
+
+    private fun start() {
+        player?.start()
     }
 
     // Try to get audio focus and then start.
-    private fun requestFocusAndStart() {
-        fun andThen() {
-            println("andThen()");
-        }
-        focusManager.maybeRequestAudioFocus(::andThen)
-        // focusManager.maybeRequestAudioFocus() //
-    }
+    // private fun requestFocusAndStart() ...
 
     fun stop() {
+        println("WrappedPlayer: stop()")
         focusManager.handleStop()
         if (released) {
             return
@@ -208,6 +209,7 @@ class WrappedPlayer internal constructor(
     }
 
     fun release() {
+        println("WrappedPlayer: release()")
         focusManager.handleStop()
         if (released) {
             return
@@ -222,11 +224,11 @@ class WrappedPlayer internal constructor(
     }
 
     fun pause() {
-        if (playing) {
-            playing = false
-            if (prepared) {
-                player?.pause()
-            }
+        println("WrappedPlayer: pause(): playing=$playing, released=$released, prepared=$prepared")
+        if (!playing) return
+        playing = false
+        if (prepared) {
+            player?.pause()
         }
     }
 
@@ -245,10 +247,11 @@ class WrappedPlayer internal constructor(
      * Player callbacks
      */
     fun onPrepared() {
+        println("WrappedPlayer: onPrepared")
         prepared = true
         ref.handleDuration(this)
         if (playing) {
-            requestFocusAndStart()
+            start()
         }
         if (shouldSeekTo >= 0) {
             player?.seekTo(shouldSeekTo)
@@ -256,6 +259,7 @@ class WrappedPlayer internal constructor(
     }
 
     fun onCompletion() {
+        println("WrappedPlayer: onCompletion. releaseMode=$releaseMode")
         if (releaseMode != ReleaseMode.LOOP) {
             stop()
         }
@@ -291,6 +295,7 @@ class WrappedPlayer internal constructor(
     }
 
     private fun PlayerWrapper.configAndPrepare() {
+        println("WrappedPlayer: configAndPrepare()")
         setVolumeAndBalance(volume, balance)
         setLooping(isLooping)
         prepare()
@@ -303,6 +308,7 @@ class WrappedPlayer internal constructor(
     }
 
     fun dispose() {
+        println("WrappedPlayer: dispose()")
         release()
         player?.dispose()
         player = null
