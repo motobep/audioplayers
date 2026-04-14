@@ -78,7 +78,7 @@ class AudioPlayer {
 
   int64_t PushBuffer(const guint8* buffer, ssize_t len);
 
-  void FlushBuffers();
+  void FlushBuffers(bool);
 
   void ReleaseMediaSource();
 

@@ -195,7 +195,7 @@ static void audioplayers_linux_plugin_handle_method_call(
       int64_t ok = player->PushBuffer(buffer, len);
       result = fl_value_new_int(ok);
     } else if (strcmp(method, "flushBuffers") == 0) {
-      player->FlushBuffers();
+      player->FlushBuffers(1);
     } else if (strcmp(method, "getDuration") == 0) {
       auto optDuration = player->GetDuration();
       result = optDuration.has_value() ? fl_value_new_int(optDuration.value())
