@@ -93,6 +93,9 @@ class AudioPlayer {
 
   std::string http_proxy{};
 
+  GstStateChangeReturn SetPipelineState(GstState state);
+  void printPipelineState(const char*);
+
  private:
   // Gst members
   GstElement* pipeline;
@@ -107,7 +110,7 @@ class AudioPlayer {
   GstElement* audiosink = nullptr;
   GstBus* bus = nullptr;
 
-  bool _isInitialized = false;
+  bool _isSourceInitialized = false;
   bool _isPlaying = false;
   bool _isLooping = false;
   bool _isSeekCompleted = true;
@@ -134,6 +137,9 @@ class AudioPlayer {
 
   void SetPlayback(int64_t seekTo, double rate);
 
+  void flushBuffersHard();
+  void flushBuffersSoft(bool);
+
   void OnMediaError(GError* error, gchar* debug);
 
   void OnMediaStateChange(GstObject* src,
@@ -153,8 +159,6 @@ class AudioPlayer {
   void SetGain(int bandIndex, float value);
   void SetBandwidth(int bandIndex, float value);
   void SetFrequency(int bandIndex, float value);
-
-  GstStateChangeReturn SetPipelineState(GstState state);
 
   SrcState GetSrcState();
 };

@@ -1,9 +1,11 @@
 #include "audio_player.h"
 #include <flutter_linux/flutter_linux.h>
+#include <stdarg.h>
+#include "logger.h"
+
 extern "C" {
 #include <gst/gst.h>
 }
-#include <stdarg.h>
 
 #define STR_LINK_TROUBLESHOOTING \
   "https://github.com/bluefireteam/audioplayers/blob/main/troubleshooting.md"
@@ -11,15 +13,6 @@ extern "C" {
 #define TIMOUT_CLOCK_TIME (100 * 1000000)  // 100 ms
 #define APP_REFRESH_TIME (250)             // ms
 
-void log(const char* format, ...) {
-  printf("Linux: ");
-
-  va_list args;
-  va_start(args, format);
-  vprintf(format, args);
-  va_end(args);
-  printf("\n");
-}
 
 inline float getInBounds(float value, float min, float max) {
   if (value > max) {
@@ -33,66 +26,78 @@ inline float getInBounds(float value, float min, float max) {
 static void on_pad_added_from_src(GstElement* src,
                                   GstPad* pad,
                                   gpointer udata) {
-  log("on_pad_added_from_src()");
-  GstElement* audioconvert = (GstElement*)udata;
+  logger::warn("on_pad_added_from_src(src: %p, pad: %p, udata: %p)", src, pad,
+               udata);
+
+  // Checking
   GstCaps* caps = gst_pad_get_current_caps(pad);
+  if (caps == nullptr) {
+    logger::error("gst_pad_get_current_caps is null");
+  }
   GstStructure* s = gst_caps_get_structure(caps, 0);
+  if (s == nullptr) {
+    logger::error("gst_caps_get_structure is null");
+  }
   const gchar* name = gst_structure_get_name(s);
 
   bool has_prefix = g_str_has_prefix(name, "audio/");
   gst_caps_unref(caps);
   if (!has_prefix) {
+    logger::error("No caps prefix");
     return;
   }
+  // Checking End
 
+  GstElement* audioconvert = (GstElement*)udata;
   GstPad* sinkpad = gst_element_get_static_pad(audioconvert, "sink");
   if (gst_pad_is_linked(sinkpad)) {
-    log("Pad already linked");
+    logger::warn("Pad already linked");
     gst_object_unref(sinkpad);
     return;
   }
 
   if (gst_pad_link(pad, sinkpad) != GST_PAD_LINK_OK) {
-    perror("Failed to link pad to audioconvert\n");
+    logger::error("Failed to link pad to audioconvert\n");
   }
   gst_object_unref(sinkpad);
 }
 
 void on_source_setup(GstElement* bin, GstElement* source, GstElement* udata) {
-  // log("on_source_setup()");
+  // logger::log("on_source_setup()");
   AudioPlayer* player = (AudioPlayer*)udata;
   GParamSpec* has_prop =
       g_object_class_find_property(G_OBJECT_GET_CLASS(source), "proxy");
   if (has_prop != 0) {
-    // log("has prop");
+    // logger::log("has prop");
     gchararray proxy;
     // g_object_get(G_OBJECT(source), "proxy", &proxy, NULL);
-    // log("proxy before: '%s'", proxy);
+    // logger::log("proxy before: '%s'", proxy);
     if (!player->http_proxy.empty()) {
       g_object_set(G_OBJECT(source), "proxy", player->http_proxy.c_str(), NULL);
     } else {
-      log("http_proxy is empty");
+      logger::log("http_proxy is empty");
     }
 
     g_object_get(G_OBJECT(source), "proxy", &proxy, NULL);
-    log("proxy after: '%s'", proxy);
+    logger::log("proxy after: '%s'", proxy);
   } else {
-    // log("no proxy");
+    // logger::log("no proxy");
   }
 };
 
 static void on_need_data(GstElement* appsrc, guint length, gpointer udata) {
-  log("need-data (length=%u)", length);
+  logger::log("need-data (length=%u)", length);
 }
 
 static void on_enough_data(GstElement* appsrc, gpointer udata) {
-  log("enough-data");
+  logger::log("enough-data");
 }
 
 AudioPlayer::AudioPlayer(std::string playerId,
                          FlMethodChannel* methodChannel,
                          FlEventChannel* eventChannel)
     : _playerId(playerId), _eventChannel(eventChannel) {
+  logger::log("AudioPlayer()");
   // GStreamer lib only needs to be initialized once, but doing it while
   // registering the plugin can be problematic as it likely needs a GUI to be
   // present. Calling it multiple times is fine.
@@ -192,7 +197,7 @@ AudioPlayer::AudioPlayer(std::string playerId,
 AudioPlayer::~AudioPlayer() {}
 
 void AudioPlayer::SetSourceUrl(std::string url) {
-  log("SetSourceSourceUrl");
+  logger::log("SetSourceSourceUrl");
 
   SrcState srcState = GetSrcState();
   if (srcState == SRC_STATE_APP) {
@@ -200,14 +205,14 @@ void AudioPlayer::SetSourceUrl(std::string url) {
     SetPipelineState(GST_STATE_NULL);
 
     // Unset urldecodebin
-    log("Unset appsrc");
+    logger::log("Unset appsrc");
     // gst_element_unlink(appsrc, app_decodebin);
     // gst_element_unlink(app_decodebin, audioconvert);
     gst_bin_remove(GST_BIN(pipeline), appsrc);
     // Ref once more. Just because.
     gst_object_ref(app_decodebin);
     if (!gst_bin_remove(GST_BIN(pipeline), app_decodebin)) {
-      log("Can't remove app_decodebin");
+      logger::log("Can't remove app_decodebin");
       // throw "Can't remove app_decodebin\n";
     }
 
@@ -217,8 +222,7 @@ void AudioPlayer::SetSourceUrl(std::string url) {
   if (_url != url) {
     _url = url;
     SetPipelineState(GST_STATE_NULL);
-    _isInitialized = false;
-    _isPlaying = false;
+    _isPlaying = false;  // TODO: should you do that?
     if (!_url.empty()) {
       g_object_set(GST_OBJECT(uridecodebin), "uri", _url.c_str(), NULL);
       if (pipeline->current_state != GST_STATE_READY) {
@@ -228,15 +232,15 @@ void AudioPlayer::SetSourceUrl(std::string url) {
         }
       }
     }
-  } else {
-    this->OnPrepared(true);
   }
+  _isSourceInitialized = true;
+  this->OnPrepared(true);
 
-  log("Switched to url: %s", url.c_str());
+  logger::log("Switched to url: %s", url.c_str());
 }
 
 void AudioPlayer::SetSourceByteStream() {
-  log("SetSourceByteStream");
+  logger::log("SetSourceByteStream");
 
   SrcState srcState = GetSrcState();
   if (srcState == SRC_STATE_URI) {
@@ -244,24 +248,24 @@ void AudioPlayer::SetSourceByteStream() {
     SetPipelineState(GST_STATE_NULL);
 
     // Unset urldecodebin
-    log("Unset uriSrc");
+    logger::log("Unset uriSrc");
     // gst_element_unlink(uridecodebin, audioconvert);
     gst_bin_remove(GST_BIN(pipeline), uridecodebin);
 
-    log("Is null");
+    logger::log("Is null");
     if (app_decodebin == NULL) {
-      log("app_decodebin is NULL");
+      logger::log("app_decodebin is NULL");
     }
-    log("Is element");
+    logger::log("Is element");
     if (!GST_IS_ELEMENT(app_decodebin)) {
-      log("app_decodebin is not GstElement");
+      logger::log("app_decodebin is not GstElement");
     }
 
-    log("Adding appsrc");
+    logger::log("Adding appsrc");
     gst_bin_add(GST_BIN(pipeline), appsrc);
-    log("Adding app_decodebin");
+    logger::log("Adding app_decodebin");
     if (!gst_bin_add(GST_BIN(pipeline), app_decodebin)) {
-      log("Can't add app_decodebin");
+      logger::log("Can't add app_decodebin");
       // throw "Can't add app_decodebin\n";
     }
 
@@ -276,14 +280,16 @@ void AudioPlayer::SetSourceByteStream() {
         throw "Unable to set the pipeline to GST_STATE_READY.";
       }
     }
-    log("Switched to appsrc");
-  } else {
-    this->OnPrepared(true);
+    logger::log("Switched to appsrc");
   }
+  _isSourceInitialized = true;
+  this->OnPrepared(true);
 }
 
 int64_t AudioPlayer::PushBuffer(const guint8* buffer, ssize_t len) {
-  log("Buffer's len (%ld)", len);
+  logger::log("PushBuffer(%ld)", len);
+  printPipelineState("PushBuffer");
+
   if (len > 0) {
     GstBuffer* gstbuf = gst_buffer_new_allocate(NULL, (gsize)len, NULL);
     gst_buffer_fill(gstbuf, 0, buffer, (gsize)len);
@@ -301,7 +307,7 @@ int64_t AudioPlayer::PushBuffer(const guint8* buffer, ssize_t len) {
 
   if (len == 0) {
     /* EOF on stdin — signal EOS */
-    log("Buffer end-of-stream emit");
+    logger::log("Buffer end-of-stream emit");
     g_signal_emit_by_name(appsrc, "end-of-stream", NULL);
   } else if (len < 0) {
     g_printerr("Read error: %s\n", strerror(errno));
@@ -309,8 +315,43 @@ int64_t AudioPlayer::PushBuffer(const guint8* buffer, ssize_t len) {
   return 0;
 }
 
-void AudioPlayer::FlushBuffers(bool is_segment) {
-  log("Flushing with events");
+void AudioPlayer::FlushBuffers(bool isHard) {
+  guint64 current_level_buffers;
+  g_object_get(G_OBJECT(appsrc), "current-level-buffers",
+               &current_level_buffers, NULL);
+  guint64 current_level_bytes;
+  g_object_get(G_OBJECT(appsrc), "current-level-bytes", &current_level_bytes,
+               NULL);
+
+  logger::warn("buffers: %lu, bytes: %lu", current_level_buffers,
+               current_level_bytes);
+
+  guint64 in;
+  g_object_get(G_OBJECT(appsrc), "in", &in, NULL);
+  guint64 out;
+  g_object_get(G_OBJECT(appsrc), "out", &out, NULL);
+  logger::warn("in: %lu, out: %lu", in, out);
+
+  if (isHard) {
+    flushBuffersHard();
+    return;
+  }
+  flushBuffersSoft(true);
+}
+
+void AudioPlayer::flushBuffersHard() {
+  SetPipelineState(GST_STATE_READY);
+  // printPipelineState("flushing: after ready");
+  if (_isPlaying) {
+    SetPipelineState(GST_STATE_PLAYING);
+  } else {
+    SetPipelineState(GST_STATE_PAUSED);
+  }
+  printPipelineState("flushing: end");
+}
+
+void AudioPlayer::flushBuffersSoft(bool is_segment) {
+  logger::log("Flushing with events");
 
   // Flushing pipeline
   GstEvent* flush_start_event = gst_event_new_flush_start();
@@ -320,7 +361,7 @@ void AudioPlayer::FlushBuffers(bool is_segment) {
   gst_element_send_event(pipeline, flush_stop_event);
 
   if (is_segment) {
-    log("is_segment");
+    logger::log("is_segment");
 
     GstSegment segment;
     gst_segment_init(&segment, GST_FORMAT_TIME);
@@ -340,26 +381,26 @@ void AudioPlayer::FlushBuffers(bool is_segment) {
     gst_element_send_event(pipeline, flush_stop_event);
   }
 
-  log("Flushed");
+  logger::log("Flushed");
 }
 
 void AudioPlayer::ReleaseMediaSource() {
   if (_isPlaying)
     _isPlaying = false;
-  if (_isInitialized)
-    _isInitialized = false;
+  if (_isSourceInitialized)
+    _isSourceInitialized = false;
   _url.clear();
 
   GstState pipelineState;
-  // log("ReleaseMediaSource: gst_element_get_state");
+  // logger::log("ReleaseMediaSource: gst_element_get_state");
   GstStateChangeReturn ret =
       gst_element_get_state(pipeline, &pipelineState, NULL, TIMOUT_CLOCK_TIME);
   if (ret == GST_STATE_CHANGE_FAILURE) {
-    log("ReleaseMediaSource failed");
+    logger::log("ReleaseMediaSource failed");
   } else {
-    // log("ReleaseMediaSource:\tout");
+    // logger::log("ReleaseMediaSource:\tout");
     if (ret != GST_STATE_CHANGE_SUCCESS) {
-      log("ReleaseMediaSource not SUCCESS (%u)", ret);
+      logger::log("ReleaseMediaSource not SUCCESS (%u)", ret);
     }
     if (pipelineState > GST_STATE_NULL) {
       SetPipelineState(GST_STATE_NULL);
@@ -370,9 +411,10 @@ void AudioPlayer::ReleaseMediaSource() {
 gboolean AudioPlayer::OnBusMessage(GstBus* bus,
                                    GstMessage* message,
                                    AudioPlayer* data) {
-  // log("OnBusMessage (%d)", GST_MESSAGE_TYPE(message));
+  // logger::log("OnBusMessage (%d)", GST_MESSAGE_TYPE(message));
   switch (GST_MESSAGE_TYPE(message)) {
     case GST_MESSAGE_ERROR: {
+      // Just info
       GError* err;
       gchar* debug;
 
@@ -390,13 +432,16 @@ gboolean AudioPlayer::OnBusMessage(GstBus* bus,
                                &new_state);
       break;
     case GST_MESSAGE_EOS:
-      log("GST_MESSAGE_EOS");
+      // Just info
+      logger::log("GST_MESSAGE_EOS");
       data->OnPlaybackEnded();
       break;
     case GST_MESSAGE_DURATION_CHANGED:
+      // Just info
       data->OnDurationUpdate();
       break;
     case GST_MESSAGE_ASYNC_DONE:
+      // Just info
       if (!data->_isSeekCompleted) {
         data->OnSeekCompleted();
         data->_isSeekCompleted = true;
@@ -420,16 +465,16 @@ gboolean AudioPlayer::OnRefresh(AudioPlayer* data) {
   }
   // We do not want to update anything unless we are in PLAYING state
   GstState pipelineState;
-  // log("OnRefresh: gst_element_get_state");
+  // logger::log("OnRefresh: gst_element_get_state");
   GstStateChangeReturn ret = gst_element_get_state(
       data->pipeline, &pipelineState, NULL, TIMOUT_CLOCK_TIME);
   if (ret != GST_STATE_CHANGE_SUCCESS) {
-    // log("OnRefresh not SUCCESS (%u)", ret);
+    // logger::log("OnRefresh not SUCCESS (%u)", ret);
   }
   if (ret == GST_STATE_CHANGE_FAILURE) {
-    log("OnRefresh failed");
+    logger::log("OnRefresh failed");
   } else {
-    // log("OnRefresh:\tout");
+    // logger::log("OnRefresh:\tout");
     if (pipelineState == GST_STATE_PLAYING) {
       data->OnPositionUpdate();
     }
@@ -474,7 +519,7 @@ void AudioPlayer::OnError(const gchar* code,
 void AudioPlayer::OnMediaStateChange(GstObject* src,
                                      GstState* old_state,
                                      GstState* new_state) {
-  // log("OnMediaStateChange (%d -> %d)", *old_state, *new_state);
+  // logger::log("OnMediaStateChange (%d -> %d)", *old_state, *new_state);
   if (!pipeline) {
     this->OnError("LinuxAudioError",
                   "Player was already disposed (OnMediaStateChange).", nullptr,
@@ -484,44 +529,17 @@ void AudioPlayer::OnMediaStateChange(GstObject* src,
 
   if (src == GST_OBJECT(pipeline)) {
     if (*new_state == GST_STATE_READY) {
-      // Need to set to pause state, in order to make player functional
-      // log("Gstreamer: Need pause");
-      GstStateChangeReturn ret = SetPipelineState(GST_STATE_PAUSED);
-      if (ret == GST_STATE_CHANGE_FAILURE) {
-        gchar const* errorDescription =
-            "Unable to set the pipeline from GST_STATE_READY to "
-            "GST_STATE_PAUSED.";
-        if (this->_isInitialized) {
-          this->OnError("LinuxAudioError", errorDescription, nullptr, nullptr);
-        } else {
-          this->OnError("LinuxAudioError",
-                        "Failed to set source. For troubleshooting, "
-                        "see: " STR_LINK_TROUBLESHOOTING,
-                        fl_value_new_string(errorDescription), nullptr);
-        }
-      }
-      if (this->_isInitialized) {
-        this->_isInitialized = false;
-      }
     } else if (*old_state == GST_STATE_PAUSED &&
                *new_state == GST_STATE_PLAYING) {
+      // Just info
       OnPositionUpdate();
       OnDurationUpdate();
-    } else if (*new_state >= GST_STATE_PAUSED) {
-      if (!this->_isInitialized) {
-        this->_isInitialized = true;
-        this->OnPrepared(true);
-        if (this->_isPlaying) {
-          Resume();
-        }
-      }
-    } else if (this->_isInitialized) {
-      this->_isInitialized = false;
     }
   }
 }
 
 void AudioPlayer::OnPrepared(bool isPrepared) {
+  logger::log("isPrepared: %u", isPrepared);
   if (this->_eventChannel) {
     g_autoptr(FlValue) map = fl_value_new_map();
     fl_value_set_string(map, "event", fl_value_new_string("audio.onPrepared"));
@@ -542,6 +560,7 @@ void AudioPlayer::OnPositionUpdate() {
 }
 
 void AudioPlayer::OnDurationUpdate() {
+  logger::log("OnDurationUpdate");
   if (this->_eventChannel) {
     g_autoptr(FlValue) map = fl_value_new_map();
     fl_value_set_string(map, "event", fl_value_new_string("audio.onDuration"));
@@ -568,12 +587,6 @@ void AudioPlayer::OnPlaybackEnded() {
     fl_value_set_string(map, "event", fl_value_new_string("audio.onComplete"));
     fl_value_set_string(map, "value", fl_value_new_bool(true));
     fl_event_channel_send(this->_eventChannel, map, nullptr, nullptr);
-  }
-  if (GetLooping()) {
-    Play();
-  } else {
-    Pause();
-    SetPosition(0);
   }
 }
 
@@ -728,20 +741,17 @@ void AudioPlayer::SetVolume(double volume) {
  * @param rate the playback rate (speed)
  */
 void AudioPlayer::SetPlayback(int64_t position, double rate) {
-  // log("SetPlayback");
+  // logger::log("SetPlayback");
   if (rate != 0 && _playbackRate != rate) {
     _playbackRate = rate;
   }
 
-  if (!_isInitialized) {
-    return;
-  }
   // See:
   // https://gstreamer.freedesktop.org/documentation/tutorials/basic/playback-speed.html?gi-language=c
   if (!_isSeekCompleted) {
     return;
   }
-  // log("seek completed");
+  // logger::log("seek completed");
   if (rate == 0) {
     // Do not set rate if it's 0, rather pause.
     Pause();
@@ -764,7 +774,7 @@ void AudioPlayer::SetPlayback(int64_t position, double rate) {
   }
 
   if (!gst_element_send_event(pipeline, seek_event)) {
-    log("SetPlayback NO boy");
+    logger::log("SetPlayback NO boy");
     int prevPos = GetPosition().value_or(-1);
     this->OnLog((std::string("Could not set playback to position ") +
                  std::to_string(position) + std::string(" and rate ") +
@@ -773,7 +783,7 @@ void AudioPlayer::SetPlayback(int64_t position, double rate) {
                     .c_str());
     _isSeekCompleted = true;
   } else {
-    log("Set to position: %ld", position);
+    logger::log("Set to position: %ld", position);
   }
 }
 
@@ -820,13 +830,17 @@ void AudioPlayer::Play() {
 }
 
 void AudioPlayer::Pause() {
+  if (!_isSourceInitialized) {
+    logger::log("Pause(): _isSourceInitialized = false");
+    return;
+  }
   if (_isPlaying) {
     _isPlaying = false;
   }
-  if (!_isInitialized) {
-    return;
-  }
-  GstStateChangeReturn ret = SetPipelineState(GST_STATE_PAUSED);
+  logger::log("pausing literulrryyrlry");
+  // NOTICE: pause only audiosink to avoid flushing pipeline
+  GstStateChangeReturn ret = gst_element_set_state(audiosink, GST_STATE_PAUSED);
+  // GstStateChangeReturn ret = SetPipelineState(GST_STATE_PAUSED);
   if (ret == GST_STATE_CHANGE_SUCCESS) {
     OnPositionUpdate();  // Update to exact position when pausing
   } else if (ret == GST_STATE_CHANGE_FAILURE) {
@@ -835,21 +849,27 @@ void AudioPlayer::Pause() {
 }
 
 void AudioPlayer::Resume() {
-  log("Resume");
+  logger::log("Resume");
+  if (!_isSourceInitialized) {
+    logger::log("Resume(): _isSourceInitialized = false");
+    return;
+  }
   if (!_isPlaying) {
     _isPlaying = true;
   }
-  if (!_isInitialized) {
-    return;
-  }
-  GstStateChangeReturn ret = SetPipelineState(GST_STATE_PLAYING);
-  if (ret == GST_STATE_CHANGE_SUCCESS) {
+  GstStateChangeReturn ret_set = SetPipelineState(GST_STATE_PLAYING);
+  printPipelineState("Resume pipeline state ");
+
+  if (ret_set == GST_STATE_CHANGE_SUCCESS) {
     // Update position and duration when start playing, as no event is emitted
     // elsewhere
+    logger::log("Resume SUCCESS");
     OnPositionUpdate();
     OnDurationUpdate();
-  } else if (ret == GST_STATE_CHANGE_FAILURE) {
+  } else if (ret_set == GST_STATE_CHANGE_FAILURE) {
     throw "Unable to set the pipeline to GST_STATE_PLAYING.";
+  } else {
+    logger::log("Resume else: %d", ret_set);
   }
 }
 
@@ -890,6 +910,21 @@ void AudioPlayer::Dispose() {
 
 GstStateChangeReturn AudioPlayer::SetPipelineState(GstState state) {
   return gst_element_set_state(pipeline, state);
+}
+
+void AudioPlayer::printPipelineState(const char* s) {
+  GstState pipelineState;
+  GstStateChangeReturn ret =
+      gst_element_get_state(pipeline, &pipelineState, NULL, TIMOUT_CLOCK_TIME);
+  if (ret == GST_STATE_CHANGE_FAILURE) {
+    logger::warn("printPipelineState() get pipeline state failed");
+    return;
+  }
+
+  if (s == NULL) {
+    s = "";
+  }
+  logger::warn("[%s] Pipeline state: %d", s, pipelineState);
 }
 
 SrcState AudioPlayer::GetSrcState() {
