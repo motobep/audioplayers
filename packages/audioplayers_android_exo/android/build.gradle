@@ -69,7 +69,8 @@ allprojects {
 
 dependencies {
     // def exoplayer_version = "1.2.0"
-    def exoplayer_version = "1.9.0"
+    def exoplayer_version = "1.8.1"
+    // def exoplayer_version = "1.9.0" // Buggy version because of StuckException
     implementation "androidx.media3:media3-exoplayer:${exoplayer_version}"
     implementation "androidx.media3:media3-exoplayer-hls:${exoplayer_version}"
     implementation "androidx.media3:media3-exoplayer-dash:${exoplayer_version}"

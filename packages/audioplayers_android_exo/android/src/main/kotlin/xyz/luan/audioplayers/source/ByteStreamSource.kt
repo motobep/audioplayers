@@ -48,7 +48,10 @@ class ByteStreamSource() : DataSource, Source {
                 logger.error( "Exception. Sending end of input")
                 return C.RESULT_END_OF_INPUT
             }
-            if (next.isEmpty()) return C.RESULT_END_OF_INPUT
+            if (next.isEmpty()) {
+                logger.warn("read: next is empty")
+                return C.RESULT_END_OF_INPUT
+            }
             currentBuffer = next
             bufferPos = 0
         }

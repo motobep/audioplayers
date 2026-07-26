@@ -280,7 +280,7 @@ class ExoPlayerWrapper(
     }
 
     override fun pushBuffer(buffer: ByteArray) {
-        logger.log("pushBuffer")
+        logger.log("pushBuffer: ${buffer.size}")
         buffersQueue.put(buffer)
     }
 
