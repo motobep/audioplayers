@@ -3,7 +3,7 @@
 !.gitignore
 !audio_player.cc
 !audio_player.h
-!logger.h
+!Logger.h
 !audioplayers_linux_plugin.cc
 !CMakeLists.txt
 
