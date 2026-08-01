@@ -1,6 +1,7 @@
 #pragma once
 
 #include <flutter_linux/flutter_linux.h>
+#include <gst/pbutils/gstdiscoverer.h>
 
 #include <future>
 #include <map>
@@ -98,6 +99,8 @@ class AudioPlayer {
 
  private:
   // Gst members
+  GstDiscoverer* discoverer;
+
   GstElement* pipeline;
   GstElement* appsrc;
   GstElement* app_decodebin;
@@ -136,6 +139,8 @@ class AudioPlayer {
   static gboolean OnRefresh(AudioPlayer* data);
 
   void SetPlayback(int64_t seekTo, double rate);
+
+  std::optional<int64_t> getDurationWithDiscoverer(std::string path);
 
   void flushBuffersHard();
   void flushBuffersSoft(bool);

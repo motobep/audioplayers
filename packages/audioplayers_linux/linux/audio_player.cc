@@ -10,8 +10,9 @@ extern "C" {
 #define STR_LINK_TROUBLESHOOTING \
   "https://github.com/bluefireteam/audioplayers/blob/main/troubleshooting.md"
 
-#define TIMOUT_CLOCK_TIME (100 * 1000000)  // 100 ms
-#define APP_REFRESH_TIME (250)             // ms
+#define TIMOUT_CLOCK_TIME (100 * 1000000)    // 100 ms
+#define APP_REFRESH_TIME (250)               // ms
+#define DISCOVERER_TIMEOUT (1 * GST_SECOND)  // minimum allowed timeout by gst
 
 void print_appsrc_props(GstElement* appsrc);
 
@@ -107,6 +108,12 @@ AudioPlayer::AudioPlayer(std::string playerId,
   gst_init(NULL, NULL);
 
   setbuf(stdout, NULL);
+
+  GError* err = NULL;
+  discoverer = gst_discoverer_new(DISCOVERER_TIMEOUT, &err);
+  if (!discoverer) {
+    logger.error("Error creating discoverer: %s", err->message);
+  }
 
   pipeline = gst_pipeline_new("pipeline");
 
@@ -581,6 +588,7 @@ void AudioPlayer::OnPlaybackEnded() {
 }
 
 void AudioPlayer::OnLog(const gchar* message) {
+  logger.log("OnLog: %s", message);
   if (this->_eventChannel) {
     g_autoptr(FlValue) map = fl_value_new_map();
     fl_value_set_string(map, "event", fl_value_new_string("audio.onLog"));
@@ -805,12 +813,42 @@ std::optional<int64_t> AudioPlayer::GetPosition() {
  */
 std::optional<int64_t> AudioPlayer::GetDuration() {
   gint64 duration = 0;
+
+  if (GetSrcState() == SRC_STATE_URI) {
+    auto dur = getDurationWithDiscoverer(_url);
+    if (dur) {
+      return dur;
+    }
+  }
+
   if (!gst_element_query_duration(pipeline, GST_FORMAT_TIME, &duration)) {
     // FIXME: Get duration for MP3 with variable bit rate with gst-discoverer:
     // https://gstreamer.freedesktop.org/documentation/pbutils/gstdiscoverer.html?gi-language=c#gst_discoverer_info_get_duration
     this->OnLog("Could not query current duration.");
     return std::nullopt;
   }
+  return std::make_optional(duration / 1000000);
+}
+
+std::optional<int64_t> AudioPlayer::getDurationWithDiscoverer(
+    std::string path) {
+  if (!discoverer) {
+    return std::nullopt;
+  }
+  GError* err = NULL;
+  GstDiscovererInfo* info =
+      gst_discoverer_discover_uri(discoverer, path.c_str(), &err);
+  if (!info) {
+    logger.error("Error discovering URI: %s", err->message);
+    return std::nullopt;
+  }
+  GstClockTime duration = gst_discoverer_info_get_duration(info);
+  if (!GST_CLOCK_TIME_IS_VALID(duration)) {
+    return std::nullopt;
+  }
+
+  guint ms = duration / GST_MSECOND;
+  logger.log("Discoverer Duration: %02u\n", ms);
   return std::make_optional(duration / 1000000);
 }
 
@@ -828,11 +866,19 @@ void AudioPlayer::Pause() {
     _isPlaying = false;
   }
   logger.log("pausing literulrryyrlry");
-  // NOTICE: pause only audiosink to avoid flushing pipeline
-  GstStateChangeReturn ret = gst_element_set_state(audiosink, GST_STATE_PAUSED);
-  // GstStateChangeReturn ret = SetPipelineState(GST_STATE_PAUSED);
+  GstStateChangeReturn ret;
+  if (GetSrcState() == SRC_STATE_URI) {
+    // For proper pause for uri
+    ret = SetPipelineState(GST_STATE_PAUSED);
+  } else {
+    // For proper flush for byte stream
+    // NOTICE: pause only audiosink to avoid flushing pipeline
+    ret = gst_element_set_state(audiosink, GST_STATE_PAUSED);
+  }
+
   if (ret == GST_STATE_CHANGE_SUCCESS) {
     OnPositionUpdate();  // Update to exact position when pausing
+    OnDurationUpdate();
   } else if (ret == GST_STATE_CHANGE_FAILURE) {
     throw "Unable to set the pipeline to GST_STATE_PAUSED.";
   }
@@ -939,7 +985,7 @@ void print_appsrc_props(GstElement* appsrc) {
                NULL);
 
   logger.log("buffers: %lu, bytes: %lu", current_level_buffers,
-              current_level_bytes);
+             current_level_bytes);
 
   guint64 in;
   g_object_get(G_OBJECT(appsrc), "in", &in, NULL);
