@@ -16,7 +16,6 @@
 #include <sstream>
 
 #include "audio_player.h"
-#include "audioplayers_helpers.h"
 
 namespace {
 
@@ -34,6 +33,20 @@ T GetArgument(const std::string arg, const EncodableValue* args, T fallback) {
     }
   }
   return result;
+}
+
+template <typename T>
+T GetArgumentOrFail(const std::string arg, const EncodableValue* args) {
+  const auto* arguments = std::get_if<EncodableMap>(args);
+  if (arguments) {
+    auto result_it = arguments->find(EncodableValue(arg));
+    if (result_it != arguments->end()) {
+      if (!result_it->second.IsNull())
+        return std::get<T>(result_it->second);
+    }
+  }
+  printf("Bad arg: %s\n", arg.c_str());;
+  throw "Bad arg";
 }
 
 class AudioplayersWindowsPlugin : public Plugin {
@@ -70,6 +83,13 @@ class AudioplayersWindowsPlugin : public Plugin {
 // static
 void AudioplayersWindowsPlugin::RegisterWithRegistrar(
     PluginRegistrarWindows* registrar) {
+
+  if (_putenv_s("GST_PLUGIN_PATH", D_GST_PLUGIN_PATH) == 0) {
+	  printf("GST_PLUGIN_PATH set\n");
+  } else {
+	  perror("ERROR: GST_PLUGIN_PATH was not set\n");
+  }
+
   binaryMessenger = registrar->messenger();
   methods = std::make_unique<MethodChannel<EncodableValue>>(
       binaryMessenger, "xyz.luan/audioplayers",
@@ -132,6 +152,7 @@ void AudioplayersWindowsPlugin::HandleMethodCall(
     const MethodCall<EncodableValue>& method_call,
     std::unique_ptr<MethodResult<EncodableValue>> result) {
   auto args = method_call.arguments();
+printf("method name: '%s'\n", method_call.method_name().c_str());
 
   auto playerId = GetArgument<std::string>("playerId", args, std::string());
   if (playerId.empty()) {
@@ -141,6 +162,7 @@ void AudioplayersWindowsPlugin::HandleMethodCall(
   }
 
   if (method_call.method_name().compare("create") == 0) {
+	  printf("----- CREATE PLAYER -----\n");
     CreatePlayer(playerId);
     result->Success();
     return;
@@ -156,60 +178,70 @@ void AudioplayersWindowsPlugin::HandleMethodCall(
   }
 
   if (method_call.method_name().compare("pause") == 0) {
-    player->Pause();
+    player->Pause(); // +
   } else if (method_call.method_name().compare("resume") == 0) {
-    player->Resume();
+    player->Resume(); // +
   } else if (method_call.method_name().compare("stop") == 0) {
-    player->Pause();
-    player->SeekTo(0);
+    player->Pause(); // +
+	player->SetPosition(0);
   } else if (method_call.method_name().compare("release") == 0) {
-    player->ReleaseMediaSource();
+    player->ReleaseMediaSource(); // +
   } else if (method_call.method_name().compare("seek") == 0) {
     auto positionInMs = GetArgument<int>(
-        "position", args, (int)ConvertSecondsToMs(player->GetPosition()));
-    player->SeekTo(ConvertMsToSeconds(positionInMs));
+        "position", args, (int)player->GetPosition().value_or(0)); // +
+    player->SetPosition(positionInMs);
   } else if (method_call.method_name().compare("setSourceUrl") == 0) {
-    auto url = GetArgument<std::string>("url", args, std::string());
+      printf(">>> setSourceUrl\n");
+    auto url = GetArgument<std::string>("url", args, std::string()); // +
 
     if (url.empty()) {
       result->Error("WindowsAudioError", "Null URL received on setSourceUrl",
                     nullptr);
       return;
     }
-
-    std::thread(&AudioPlayer::SetSourceUrl, player, url).detach();
+    auto isLocal = GetArgument<bool>("isLocal", args, false);
+      if (isLocal) {
+        url = std::string("file://" "/") + url;
+      }
+      printf("<> setSourceUrl\n");
+      player->SetSourceUrl(url);
+      printf("<<< setSourceUrl\n");
   } else if (method_call.method_name().compare("setSourceBytes") == 0) {
-    auto data = GetArgument<std::vector<uint8_t>>("bytes", args,
-                                                  std::vector<uint8_t>{});
-
-    if (data.empty()) {
-      result->Error("WindowsAudioError",
-                    "Null bytes received on setSourceBytes", nullptr);
+      result->Error("WindowsAudioError", "Unimplemented setSourceBytes", nullptr); // +
       return;
-    }
-
-    std::thread(&AudioPlayer::SetSourceBytes, player, data).detach();
+  } else if (method_call.method_name().compare("setSourceByteStream") == 0) {
+      player->SetSourceByteStream();
+  } else if (method_call.method_name().compare("pushBuffer") == 0) {
+      const guint8* buffer = GetArgumentOrFail<std::vector<uint8_t>>("buffer", args).data();
+      int64_t len = GetArgumentOrFail<int64_t>("len", args);
+      int64_t ok = player->PushBuffer(buffer, len);
+      result->Success(EncodableValue(ok));
+      return;
+  } else if (method_call.method_name().compare("flushBuffers") == 0) {
+      player->FlushBuffers();
   } else if (method_call.method_name().compare("getDuration") == 0) {
-    auto duration = player->GetDuration();
-    result->Success(isnan(duration)
-                        ? EncodableValue(std::monostate{})
-                        : EncodableValue(ConvertSecondsToMs(duration)));
+    auto optDuration = player->GetDuration(); // +
+    result->Success(optDuration.has_value()
+                        ? EncodableValue(optDuration.value())
+			: EncodableValue(std::monostate{})
+			);
     return;
   } else if (method_call.method_name().compare("setVolume") == 0) {
     auto volume = GetArgument<double>("volume", args, 1.0);
     player->SetVolume(volume);
   } else if (method_call.method_name().compare("getCurrentPosition") == 0) {
-    auto position = player->GetPosition();
-    result->Success(isnan(position)
-                        ? EncodableValue(std::monostate{})
-                        : EncodableValue(ConvertSecondsToMs(position)));
+    auto optPosition = player->GetPosition(); // +
+    result->Success(optPosition.has_value()
+                        ? EncodableValue(optPosition.value())
+                        : EncodableValue(std::monostate{})
+			);
     return;
   } else if (method_call.method_name().compare("setPlaybackRate") == 0) {
-    auto playbackRate = GetArgument<double>("playbackRate", args, 1.0);
-    player->SetPlaybackSpeed(playbackRate);
+    auto playbackRate = GetArgument<double>("playbackRate", args, 1.0); // +
+    player->SetPlaybackRate(playbackRate);
   } else if (method_call.method_name().compare("setReleaseMode") == 0) {
     auto releaseMode =
-        GetArgument<std::string>("releaseMode", args, std::string());
+        GetArgument<std::string>("releaseMode", args, std::string()); // +
     if (releaseMode.empty()) {
       result->Error("WindowsAudioError",
                     "Error calling setReleaseMode, releaseMode cannot be null",
@@ -221,23 +253,46 @@ void AudioplayersWindowsPlugin::HandleMethodCall(
   } else if (method_call.method_name().compare("setPlayerMode") == 0) {
     // windows doesn't have multiple player modes, so this should no-op
   } else if (method_call.method_name().compare("setBalance") == 0) {
-    auto balance = GetArgument<double>("balance", args, 0.0);
-    player->SetBalance(balance);
+    double balance = GetArgument<double>("balance", args, 0.0); // +
+    player->SetBalance((float) balance);
+  } else if (method_call.method_name().compare("equalizer.getEnabled") == 0) {
+    result->Success(EncodableValue(player->GetEnabled()));
+    return;
+  } else if (method_call.method_name().compare("equalizer.setEnabled") == 0) {
+    bool isEnabled = GetArgumentOrFail<bool>("isEnabled", args);
+    player->SetEnabled(isEnabled);
+  } else if (method_call.method_name().compare("equalizer.getNumberOfBands") == 0) {
+    result->Success(EncodableValue(player->GetNumberOfBands()));
+    return;
+  } else if (method_call.method_name().compare("equalizer.getLimits") == 0) {
+    result->Success(EncodableValue(player->GetLimits()));
+    return;
+  } else if (method_call.method_name().compare("equalizer.getBand") == 0) {
+    int bandIndex = GetArgumentOrFail<int>("bandIndex", args);
+    result->Success(EncodableValue(player->GetBand(bandIndex)));
+    return;
+  } else if (method_call.method_name().compare("equalizer.setBand") == 0) {
+    int bandIndex = GetArgumentOrFail<int>("bandIndex", args);
+    EncodableMap band = GetArgumentOrFail<EncodableMap>("band", args);
+    player->SetBand(bandIndex, band);
   } else if (method_call.method_name().compare("emitLog") == 0) {
-    auto message = GetArgument<std::string>("message", args, std::string());
+    auto message = GetArgument<std::string>("message", args, std::string()); // +
     player->OnLog(message);
   } else if (method_call.method_name().compare("emitError") == 0) {
-    auto code = GetArgument<std::string>("code", args, std::string());
+    auto code = GetArgument<std::string>("code", args, std::string()); // +
     auto message = GetArgument<std::string>("message", args, std::string());
-    player->OnError(code, message, nullptr);
+    player->OnError(code, message, nullptr, nullptr);
   } else if (method_call.method_name().compare("dispose") == 0) {
-    player->Dispose();
+    player->Dispose(); // +
     audioPlayers.erase(playerId);
   } else {
+  printf("else not implemented\n");
     result->NotImplemented();
     return;
   }
+  printf("result->Success()\n");
   result->Success();
+  printf("result->Success() after\n");
 }
 
 void AudioplayersWindowsPlugin::CreatePlayer(std::string playerId) {

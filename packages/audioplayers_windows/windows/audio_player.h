@@ -1,67 +1,63 @@
 #pragma once
 
+//#include <flutter_linux/flutter_linux.h>
+
 #include <flutter/event_channel.h>
 #include <flutter/event_stream_handler.h>
 #include <flutter/event_stream_handler_functions.h>
 #include <flutter/method_channel.h>
 #include <flutter/plugin_registrar_windows.h>
 #include <flutter/standard_method_codec.h>
-#include <windows.h>
 
-#undef GetCurrentTime
+#include "event_stream_handler.h"
 
-#include <shobjidl.h>
-#include <unknwn.h>
-#include <winrt/Windows.Foundation.Collections.h>
-
-#include "winrt/Windows.System.h"
-
-// Include prior to C++/WinRT Headers
-#include <wil/cppwinrt.h>
-
-// Windows Implementation Library
-#include <wil/resource.h>
-#include <wil/result_macros.h>
-
-// MediaFoundation headers
-#include <Audioclient.h>
-#include <mfapi.h>
-#include <mferror.h>
-#include <mfmediaengine.h>
+#include <future>
+#include <map>
+#include <memory>
+#include <optional>
+#include <sstream>
+#include <string>
 
 // STL headers
-#include <wincodec.h>
-
 #include <functional>
-#include <future>
 #include <map>
 #include <memory>
 #include <sstream>
 #include <string>
 
-#include "MediaEngineWrapper.h"
-#include "MediaFoundationHelpers.h"
-#include "event_stream_handler.h"
+#include <cassert>
 
-using namespace winrt;
+#define assertm(exp, msg) assert((void(msg), exp))
+
+extern "C" {
+#include <gst/gst.h>
+#include <gst/app/gstappsrc.h>
+}
+
+#define __AUDIO_PLAYER_NUM_BUNDS 10
+
+typedef flutter::EncodableValue _FlValue;
+typedef flutter::EncodableMap _EncMap;
+
+typedef uint64_t ssize_t;
+
+typedef enum {
+  SRC_STATE_APP = 0,
+  SRC_STATE_URI = 1,
+} SrcState;
 
 class AudioPlayer {
  public:
-  AudioPlayer(std::string playerId,
-              flutter::MethodChannel<flutter::EncodableValue>* methodChannel,
-              EventStreamHandler<>* eventHandler);
+ AudioPlayer::AudioPlayer(
+	 std::string playerId,
+	 flutter::MethodChannel<flutter::EncodableValue>* methodChannel,
+	 EventStreamHandler<>* eventHandler);
 
-  void Dispose();
+  std::optional<int64_t> GetPosition();
 
-  void ReleaseMediaSource();
+  std::optional<int64_t> GetDuration();
 
-  void SetLooping(bool isLooping);
-
-  void SetVolume(double volume);
-
-  void SetPlaybackSpeed(double playbackSpeed);
-
-  void SetBalance(double balance);
+  bool GetLooping();
 
   void Play();
 
@@ -69,54 +65,119 @@ class AudioPlayer {
 
   void Resume();
 
-  bool GetLooping();
+  void Dispose();
 
-  double GetPosition();
+  // Equalizer
+  bool GetEnabled();
+  void SetEnabled(bool isEnabled);
 
-  double GetDuration();
+  int GetNumberOfBands();
+  _EncMap GetLimits();
 
-  void SeekTo(double seek);
+  _EncMap GetBand(int bandIndex);
+  void SetBand(int bandIndex, _EncMap band);
 
-  void SetSourceBytes(std::vector<uint8_t> bytes);
+  void SetBalance(float balance);
+
+  void SetLooping(bool isLooping);
+
+  void SetVolume(double volume);
+
+  void SetPlaybackRate(double rate);
+
+  void SetPosition(int64_t position);
 
   void SetSourceUrl(std::string url);
 
-  void OnLog(const std::string& message);
+  void SetSourceByteStream();
+
+  int64_t PushBuffer(const guint8* buffer, ssize_t len);
+
+  void FlushBuffers();
+
+  void ReleaseMediaSource();
 
   void OnError(const std::string& code,
-               const std::string& message,
-               const flutter::EncodableValue& details);
+		  const std::string& message,
+		  const flutter::EncodableValue& details,
+		  GError** error
+		  );
+
+  void OnLog(const std::string& message);
 
   virtual ~AudioPlayer();
 
+  std::string http_proxy{};
+
  private:
-  // Media members
-  media::MFPlatformRef m_mfPlatform;
-  winrt::com_ptr<media::MediaEngineWrapper> m_mediaEngineWrapper;
+  // Gst members
+  GstElement* pipeline;
+  GstElement* appsrc;
+  GstElement* app_decodebin;
+  GstElement* uridecodebin;
+  GstElement* audioconvert;
+  GstElement* audioresample;
+  GstElement* volume_elem;
+  GstElement* equalizer = nullptr;
+  GstElement* panorama = nullptr;
+  GstElement* audiosink = nullptr;
+  GstBus* bus = nullptr;
 
   bool _isInitialized = false;
+  bool _isPlaying = false;
+  bool _isLooping = false;
+  bool _isSeekCompleted = true;
+  double _playbackRate = 1.0;
+  guint _refreshId;
+
   std::string _url{};
+  std::string _playerId;
+  EventStreamHandler<>* _eventHandler;
 
-  void SendInitialized();
 
-  void OnMediaError(MF_MEDIA_ENGINE_ERR error, HRESULT hr);
+  GMainLoop* _g_main_loop = nullptr;
+  std::thread _thread;
 
-  void OnMediaStateChange(
-      media::MediaEngineWrapper::BufferingState bufferingState);
+  void thread_start();
+  void thread_end();
 
-  void OnPlaybackEnded();
+
+  GObject* eqBands[__AUDIO_PLAYER_NUM_BUNDS];
+  float eqWhenDisabledGains[__AUDIO_PLAYER_NUM_BUNDS];
+
+  static const int eqNumBands = __AUDIO_PLAYER_NUM_BUNDS;
+  _EncMap _limitsMap = _EncMap{};
+  bool _isEnabled = true;
+
+  static gboolean OnBusMessage(GstBus* bus,
+                               GstMessage* message,
+                               AudioPlayer* data);
+
+  static gboolean OnRefresh(AudioPlayer* data);
+
+  void SetPlayback(int64_t seekTo, double rate);
+
+  void OnMediaError(GError* error, gchar* debug);
+
+  void OnMediaStateChange(GstObject* src,
+                          GstState* old_state,
+                          GstState* new_state);
+
+  void OnPositionUpdate();
 
   void OnDurationUpdate();
 
-  void OnTimeUpdate();
-
   void OnSeekCompleted();
+
+  void OnPlaybackEnded();
 
   void OnPrepared(bool isPrepared);
 
-  std::string _playerId;
+  void SetGain(int bandIndex, float value);
+  void SetBandwidth(int bandIndex, float value);
+  void SetFrequency(int bandIndex, float value);
 
-  flutter::MethodChannel<flutter::EncodableValue>* _methodChannel;
+  GstStateChangeReturn SetPipelineState(GstState state);
 
-  EventStreamHandler<>* _eventHandler;
+  SrcState GetSrcState();
 };
