@@ -1,20 +1,11 @@
-flutter/
+/*
 
-# CLion build files.
-cmake-build-debug
+!.gitignore
 
-# Visual Studio user-specific files.
-*.suo
-*.user
-*.userosscache
-*.sln.docstates
+!CMakeLists.txt
+!audio_player.cc
+!audio_player.h
+!audioplayers_windows_plugin.cpp
 
-# Visual Studio build-related files.
-x64/
-x86/
-
-# Visual Studio cache files
-# files ending in .cache can be ignored
-*.[Cc]ache
-# but keep track of directories ending in .cache
-!*.[Cc]ache/
+!include/
+!dlls/
