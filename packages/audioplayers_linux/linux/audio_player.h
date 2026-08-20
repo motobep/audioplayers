@@ -1,7 +1,7 @@
 #pragma once
 
-#include <flutter_linux/flutter_linux.h>
 #include <gst/pbutils/gstdiscoverer.h>
+#include "audio_player_platform_specific.h"
 
 #include <future>
 #include <map>
@@ -12,10 +12,8 @@
 
 // STL headers
 #include <functional>
-#include <map>
-#include <memory>
-#include <sstream>
-#include <string>
+
+#include <vector>
 
 #include <cassert>
 
@@ -35,9 +33,23 @@ typedef enum {
 
 class AudioPlayer {
  public:
+  using SelfFunc = void (*)(AudioPlayer*);
+  using OnSendSuccessFunc = void (*)(MyEventChannel* eventChannel,
+                                     const std::string& event,
+                                     const MyVariant& value);
+  using OnErrorFunc = void (*)(MyEventChannel* eventChannel,
+                               const std::string& code,
+                               const std::string& message,
+                               const char* details,
+                               GError** error);
+
   AudioPlayer(std::string playerId,
-              FlMethodChannel* methodChannel,
-              FlEventChannel* eventChannel);
+              MyMethodChannel* methodChannel,
+              MyEventChannel* eventChannel,
+              SelfFunc onInitEndCallback = nullptr,
+              SelfFunc onDisposeEndCallback = nullptr,
+              OnSendSuccessFunc onSendSuccessCallback = nullptr,
+              OnErrorFunc onErrorCallback = nullptr);
 
   std::optional<int64_t> GetPosition();
 
@@ -58,10 +70,10 @@ class AudioPlayer {
   void SetEnabled(bool isEnabled);
 
   int GetNumberOfBands();
-  FlValue* GetLimits();
+  std::map<std::string, std::vector<double>> GetLimits();
 
-  FlValue* GetBand(int bandIndex);
-  void SetBand(int bandIndex, FlValue* band);
+  std::map<std::string, double> GetBand(int bandIndex);
+  void SetBand(int bandIndex, std::map<std::string, double> band);
 
   void SetBalance(float balance);
 
@@ -83,16 +95,20 @@ class AudioPlayer {
 
   void ReleaseMediaSource();
 
-  void OnError(const gchar* code,
-               const gchar* message,
-               FlValue* details,
+  void OnError(const std::string& code,
+               const std::string& message,
+               const char* details,
                GError** error);
 
-  void OnLog(const gchar* message);
+  void OnLog(const std::string& message);
+
+  void SendSuccess(const std::string& event, const MyVariant& value);
 
   virtual ~AudioPlayer();
 
   std::string http_proxy{};
+
+  bool isUsingEventChannel = true;
 
   GstStateChangeReturn SetPipelineState(GstState state);
   void printPipelineState(const char*);
@@ -109,7 +125,7 @@ class AudioPlayer {
   GstElement* audioresample;
   GstElement* volume_elem;
   GstElement* equalizer = nullptr;
-  GstElement* panorama = nullptr;
+  // GstElement* panorama = nullptr;
   GstElement* audiosink = nullptr;
   GstBus* bus = nullptr;
 
@@ -122,14 +138,22 @@ class AudioPlayer {
 
   std::string _url{};
   std::string _playerId;
-  FlEventChannel* _eventChannel;
+
+ public:
+  // Think about making private again
+  MyEventChannel* _eventChannel;
+
+ private:
+  SelfFunc OnInitEndCallback = nullptr;
+  SelfFunc OnDisposeEndCallback = nullptr;
+  OnSendSuccessFunc OnSendSuccessCallback = nullptr;
+  OnErrorFunc OnErrorCallback = nullptr;
 
   GObject* eqBands[__AUDIO_PLAYER_NUM_BUNDS];
   float eqWhenDisabledGains[__AUDIO_PLAYER_NUM_BUNDS];
 
   static const int eqNumBands = __AUDIO_PLAYER_NUM_BUNDS;
-  FlValue* _bandMap = fl_value_new_map();
-  FlValue* _limitsMap = fl_value_new_map();
+  std::map<std::string, std::vector<double>> _limitsMap{};
   bool _isEnabled = true;
 
   static gboolean OnBusMessage(GstBus* bus,

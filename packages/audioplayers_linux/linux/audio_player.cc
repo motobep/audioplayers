@@ -1,6 +1,4 @@
 #include "audio_player.h"
-#include <flutter_linux/flutter_linux.h>
-#include <stdarg.h>
 #include "Logger.h"
 
 extern "C" {
@@ -15,6 +13,9 @@ extern "C" {
 #define DISCOVERER_TIMEOUT (1 * GST_SECOND)  // minimum allowed timeout by gst
 
 void print_appsrc_props(GstElement* appsrc);
+
+template <typename T>
+std::vector<T> arrayToList(const T* arr, int size);
 
 Logger logger{};
 
@@ -61,7 +62,7 @@ static void on_pad_added_from_src(GstElement* src,
   }
 
   if (gst_pad_link(pad, sinkpad) != GST_PAD_LINK_OK) {
-    logger.error("Failed to link pad to audioconvert\n");
+    logger.error("Failed to link pad to audioconvert");
   }
   gst_object_unref(sinkpad);
 }
@@ -99,8 +100,17 @@ static void on_enough_data(GstElement* appsrc, gpointer udata) {
 
 AudioPlayer::AudioPlayer(std::string playerId,
                          FlMethodChannel* methodChannel,
-                         FlEventChannel* eventChannel)
-    : _playerId(playerId), _eventChannel(eventChannel) {
+                         FlEventChannel* eventChannel,
+                         SelfFunc onInitEndCallback,
+                         SelfFunc onDisposeEndCallback,
+                         OnSendSuccessFunc onSendSuccessCallback,
+                         OnErrorFunc onErrorCallback)
+    : _playerId(playerId),
+      _eventChannel(eventChannel),
+      OnInitEndCallback(onInitEndCallback),
+      OnDisposeEndCallback(onDisposeEndCallback),
+      OnSendSuccessCallback(onSendSuccessCallback),
+      OnErrorCallback(onErrorCallback) {
   logger.log("AudioPlayer()");
   // GStreamer lib only needs to be initialized once, but doing it while
   // registering the plugin can be problematic as it likely needs a GUI to be
@@ -127,22 +137,22 @@ AudioPlayer::AudioPlayer(std::string playerId,
   audioresample = gst_element_factory_make("audioresample", "audioresample");
   volume_elem = gst_element_factory_make("volume", "volume_elem");
   equalizer = gst_element_factory_make("equalizer-nbands", "equalizer");
-  panorama = gst_element_factory_make("audiopanorama", NULL);
+  // panorama = gst_element_factory_make("audiopanorama", NULL);
   audiosink = gst_element_factory_make("autoaudiosink", NULL);
 
   // Setup equalizer and stereo balance controller
   if (!pipeline || !appsrc || !app_decodebin || !uridecodebin ||
       !audioconvert || !audioresample || !volume_elem || !equalizer ||
-      !panorama || !audiosink) {
+      /* !panorama || */ !audiosink) {
     perror("Failed to create elements\n");
     throw "Failed to create elements\n";
   }
 
   gst_bin_add_many(GST_BIN(pipeline), uridecodebin, audioconvert, audioresample,
-                   volume_elem, equalizer, panorama, audiosink, NULL);
+                   volume_elem, equalizer, /* panorama, */ audiosink, NULL);
 
   if (!gst_element_link_many(audioconvert, audioresample, volume_elem,
-                             equalizer, panorama, audiosink, NULL)) {
+                             equalizer, /* panorama, */ audiosink, NULL)) {
     perror("Can't link elements\n");
     throw "Can't link elements\n";
   }
@@ -168,7 +178,7 @@ AudioPlayer::AudioPlayer(std::string playerId,
   g_signal_connect(appsrc, "need-data", G_CALLBACK(on_need_data), NULL);
 
   // Set panorama and equalizer
-  g_object_set(G_OBJECT(panorama), "method", 1, NULL);
+  // g_object_set(G_OBJECT(panorama), "method", 1, NULL);
   g_object_set(G_OBJECT(equalizer), "num-bands", AudioPlayer::eqNumBands, NULL);
 
   // Set bands
@@ -186,12 +196,13 @@ AudioPlayer::AudioPlayer(std::string playerId,
   const double gainLimits[] = {-24.0, 12.0};
   const double bandwidthLimits[] = {0.0, 20000.0};
   const double frequencyLimits[] = {20.0, 20000.0};
-  fl_value_set_string(_limitsMap, "gain",
-                      fl_value_new_float_list(gainLimits, 2));
-  fl_value_set_string(_limitsMap, "bandwidth",
-                      fl_value_new_float_list(bandwidthLimits, 2));
-  fl_value_set_string(_limitsMap, "frequency",
-                      fl_value_new_float_list(frequencyLimits, 2));
+
+  std::map<std::string, std::vector<double>> map{
+      {"gain", arrayToList(gainLimits, 2)},
+      {"bandwidth", arrayToList(bandwidthLimits, 2)},
+      {"frequency", arrayToList(frequencyLimits, 2)}};
+
+  _limitsMap = map;
 
   bus = gst_element_get_bus(pipeline);
 
@@ -201,6 +212,12 @@ AudioPlayer::AudioPlayer(std::string playerId,
   // Refresh continuously to emit reoccurring events
   _refreshId = g_timeout_add(APP_REFRESH_TIME,
                              (GSourceFunc)AudioPlayer::OnRefresh, this);
+
+  if (OnInitEndCallback) {
+    OnInitEndCallback(this);
+  } else {
+    logger.warn("OnInitEndCallback is null");
+  }
 }
 
 AudioPlayer::~AudioPlayer() {}
@@ -371,11 +388,11 @@ void AudioPlayer::flushBuffersSoft(bool is_segment) {
     gst_pad_push_event(appsrc_pad, gst_event_new_segment(&segment));
 
     // Flushing pipeline again
-    GstEvent* flush_start_event = gst_event_new_flush_start();
-    gst_element_send_event(pipeline, flush_start_event);
+    GstEvent* flush_start_event_2 = gst_event_new_flush_start();
+    gst_element_send_event(pipeline, flush_start_event_2);
 
-    GstEvent* flush_stop_event = gst_event_new_flush_stop(TRUE);
-    gst_element_send_event(pipeline, flush_stop_event);
+    GstEvent* flush_stop_event_2 = gst_event_new_flush_stop(TRUE);
+    gst_element_send_event(pipeline, flush_stop_event_2);
   }
 
   logger.log("Flushed");
@@ -486,7 +503,6 @@ void AudioPlayer::OnMediaError(GError* error, gchar* debug) {
     auto detailsStr = std::string(error->message) + " (Domain: " +
                       std::string(g_quark_to_string(error->domain)) +
                       ", Code: " + std::to_string(error->code) + ")";
-    FlValue* details = fl_value_new_string(detailsStr.c_str());
     // https://gstreamer.freedesktop.org/documentation/gstreamer/gsterror.html#enumerations
     if (error->domain == GST_STREAM_ERROR) {
       message =
@@ -495,17 +511,20 @@ void AudioPlayer::OnMediaError(GError* error, gchar* debug) {
     } else {
       message = "Unknown GstGError. See details.";
     }
-    this->OnError(code, message, details, &error);
+    this->OnError(code, message, detailsStr.c_str(), &error);
   }
 }
 
-void AudioPlayer::OnError(const gchar* code,
-                          const gchar* message,
-                          FlValue* details,
+void AudioPlayer::OnError(const std::string& code,
+                          const std::string& message,
+                          const char* details,
                           GError** error) {
   if (this->_eventChannel) {
-    fl_event_channel_send_error(this->_eventChannel, code, message, details,
-                                nullptr, error);
+    if (OnErrorCallback) {
+      OnErrorCallback(this->_eventChannel, code, message, details, error);
+    } else {
+      logger.warn("OnErrorCallback is null");
+    }
   } else {
     std::ostringstream oss;
     oss << "Error: " << code << "; message=" << message;
@@ -537,65 +556,33 @@ void AudioPlayer::OnMediaStateChange(GstObject* src,
 
 void AudioPlayer::OnPrepared(bool isPrepared) {
   logger.log("isPrepared: %u", isPrepared);
-  if (this->_eventChannel) {
-    g_autoptr(FlValue) map = fl_value_new_map();
-    fl_value_set_string(map, "event", fl_value_new_string("audio.onPrepared"));
-    fl_value_set_string(map, "value", fl_value_new_bool(isPrepared));
-    fl_event_channel_send(this->_eventChannel, map, nullptr, nullptr);
-  }
+  this->SendSuccess("audio.onPrepared", MyVariant(isPrepared));
 }
 
 void AudioPlayer::OnPositionUpdate() {
-  if (this->_eventChannel) {
-    g_autoptr(FlValue) map = fl_value_new_map();
-    fl_value_set_string(map, "event",
-                        fl_value_new_string("audio.onCurrentPosition"));
-    fl_value_set_string(map, "value",
-                        fl_value_new_int(GetPosition().value_or(0)));
-    fl_event_channel_send(this->_eventChannel, map, nullptr, nullptr);
-  }
+  int64_t position = GetPosition().value_or(0);
+  this->SendSuccess("audio.onCurrentPosition", MyVariant(position));
 }
 
 void AudioPlayer::OnDurationUpdate() {
   logger.log("OnDurationUpdate");
-  if (this->_eventChannel) {
-    g_autoptr(FlValue) map = fl_value_new_map();
-    fl_value_set_string(map, "event", fl_value_new_string("audio.onDuration"));
-    fl_value_set_string(map, "value",
-                        fl_value_new_int(GetDuration().value_or(0)));
-    fl_event_channel_send(this->_eventChannel, map, nullptr, nullptr);
-  }
+  int64_t duration = GetDuration().value_or(0);
+  this->SendSuccess("audio.onDuration", MyVariant(duration));
 }
 
 void AudioPlayer::OnSeekCompleted() {
-  if (this->_eventChannel) {
-    OnPositionUpdate();
-    g_autoptr(FlValue) map = fl_value_new_map();
-    fl_value_set_string(map, "event",
-                        fl_value_new_string("audio.onSeekComplete"));
-    fl_value_set_string(map, "value", fl_value_new_bool(true));
-    fl_event_channel_send(this->_eventChannel, map, nullptr, nullptr);
-  }
+  OnPositionUpdate();
+  this->SendSuccess("audio.onSeekComplete", MyVariant(true));
 }
 
 void AudioPlayer::OnPlaybackEnded() {
-  if (this->_eventChannel) {
-    g_autoptr(FlValue) map = fl_value_new_map();
-    fl_value_set_string(map, "event", fl_value_new_string("audio.onComplete"));
-    fl_value_set_string(map, "value", fl_value_new_bool(true));
-    fl_event_channel_send(this->_eventChannel, map, nullptr, nullptr);
-  }
+  this->SendSuccess("audio.onComplete", MyVariant(true));
 }
 
-void AudioPlayer::OnLog(const gchar* message) {
-  logger.log("OnLog: %s", message);
-  if (this->_eventChannel) {
-    g_autoptr(FlValue) map = fl_value_new_map();
-    fl_value_set_string(map, "event", fl_value_new_string("audio.onLog"));
-    fl_value_set_string(map, "value", fl_value_new_string(message));
-
-    fl_event_channel_send(this->_eventChannel, map, nullptr, nullptr);
-  }
+void AudioPlayer::OnLog(const std::string& message) {
+  logger.log("OnLog");
+  this->SendSuccess("audio.onLog", MyVariant(message));
+  logger.log("OnLog return");
 }
 
 bool AudioPlayer::GetEnabled() {
@@ -612,7 +599,7 @@ void AudioPlayer::SetEnabled(bool isEnabled) {
         // Saving previous gains
         gdouble gain;
         g_object_get(AudioPlayer::eqBands[i], "gain", &gain, NULL);
-        eqWhenDisabledGains[i] = gain;
+        eqWhenDisabledGains[i] = (float)gain;
         // Disable current gains
         SetGain(i, 0.0);
       }
@@ -635,11 +622,11 @@ int AudioPlayer::GetNumberOfBands() {
   return __AUDIO_PLAYER_NUM_BUNDS;
 }
 
-FlValue* AudioPlayer::GetLimits() {
+std::map<std::string, std::vector<double>> AudioPlayer::GetLimits() {
   return _limitsMap;
 }
 
-FlValue* AudioPlayer::GetBand(int bandIndex) {
+std::map<std::string, double> AudioPlayer::GetBand(int bandIndex) {
   gdouble gain;
   gdouble bandwidth;
   gdouble freq;
@@ -653,35 +640,44 @@ FlValue* AudioPlayer::GetBand(int bandIndex) {
   g_object_get(AudioPlayer::eqBands[bandIndex], "bandwidth", &bandwidth, NULL);
   g_object_get(AudioPlayer::eqBands[bandIndex], "freq", &freq, NULL);
 
-  fl_value_set_string(_bandMap, "gain", fl_value_new_float(gain));
-  fl_value_set_string(_bandMap, "bandwidth", fl_value_new_float(bandwidth));
-  fl_value_set_string(_bandMap, "frequency", fl_value_new_float(freq));
+  std::map<std::string, double> map{
+      {"gain", gain}, {"bandwidth", bandwidth}, {"frequency", freq}};
 
-  return _bandMap;
+  return map;
 }
 
-void AudioPlayer::SetBand(int bandIndex, FlValue* band) {
+template <typename T>
+static T mapAt(const std::map<std::string, gdouble>& map,
+               const std::string arg) {
+  const auto& value = map.at(arg);
+  return value;
+}
+static bool mapHas(const std::map<std::string, gdouble>& map,
+                   const std::string arg) {
+  return map.find(arg) != map.end();
+}
+
+void AudioPlayer::SetBand(int bandIndex, std::map<std::string, double> band) {
   if (!equalizer) {
     this->OnLog("Equalizer was not initialized");
     return;
   }
 
-  auto flGain = fl_value_lookup_string(band, "gain");
-  if (flGain != nullptr) {
-    double gain = fl_value_get_float(flGain);
-    SetGain(bandIndex, gain);
+  const auto& map = band;
+
+  if (mapHas(map, "gain")) {
+    double value = mapAt<double>(map, "gain");
+    SetGain(bandIndex, (float)value);
   }
 
-  auto flBandwidth = fl_value_lookup_string(band, "bandwidth");
-  if (flBandwidth != nullptr) {
-    double value = fl_value_get_float(flBandwidth);
-    SetBandwidth(bandIndex, value);
+  if (mapHas(map, "bandwidth")) {
+    double value = mapAt<double>(map, "bandwidth");
+    SetBandwidth(bandIndex, (float)value);
   }
 
-  auto flFrequency = fl_value_lookup_string(band, "frequency");
-  if (flFrequency != nullptr) {
-    double value = fl_value_get_float(flFrequency);
-    SetFrequency(bandIndex, value);
+  if (mapHas(map, "frequency")) {
+    double value = mapAt<double>(map, "frequency");
+    SetFrequency(bandIndex, (float)value);
   }
 }
 
@@ -705,12 +701,13 @@ void AudioPlayer::SetFrequency(int bandIndex, float value) {
 }
 
 void AudioPlayer::SetBalance(float balance) {
-  if (balance > 1.0f) {
-    balance = 1.0f;
-  } else if (balance < -1.0f) {
-    balance = -1.0f;
-  }
-  g_object_set(G_OBJECT(panorama), "panorama", balance, NULL);
+  throw "No setBalance";
+  // if (balance > 1.0f) {
+  //   balance = 1.0f;
+  // } else if (balance < -1.0f) {
+  //   balance = -1.0f;
+  // }
+  // g_object_set(G_OBJECT(panorama), "panorama", balance, NULL);
 }
 
 void AudioPlayer::SetLooping(bool isLooping) {
@@ -773,7 +770,7 @@ void AudioPlayer::SetPlayback(int64_t position, double rate) {
 
   if (!gst_element_send_event(pipeline, seek_event)) {
     logger.log("SetPlayback NO boy");
-    int prevPos = GetPosition().value_or(-1);
+    int64_t prevPos = GetPosition().value_or(-1);
     this->OnLog((std::string("Could not set playback to position ") +
                  std::to_string(position) + std::string(" and rate ") +
                  std::to_string(rate) + std::string(" prevPos=(") +
@@ -847,8 +844,8 @@ std::optional<int64_t> AudioPlayer::getDurationWithDiscoverer(
     return std::nullopt;
   }
 
-  guint ms = duration / GST_MSECOND;
-  logger.log("Discoverer Duration: %02u\n", ms);
+  int64_t ms = (int64_t)(duration / GST_MSECOND);
+  logger.log("Discoverer Duration: %02u", ms);
   return std::make_optional(duration / 1000000);
 }
 
@@ -934,14 +931,18 @@ void AudioPlayer::Dispose() {
   bin_remove_and_null(GST_BIN(pipeline), &audioresample);
   bin_remove_and_null(GST_BIN(pipeline), &volume_elem);
   bin_remove_and_null(GST_BIN(pipeline), &equalizer);
-  bin_remove_and_null(GST_BIN(pipeline), &panorama);
+  // bin_remove_and_null(GST_BIN(pipeline), &panorama);
   bin_remove_and_null(GST_BIN(pipeline), &audiosink);
 
   gst_object_unref(GST_OBJECT(pipeline));
-  // Do not dispose method channel as it is used by multiple players!
-  g_clear_object(&_eventChannel);
-  _eventChannel = nullptr;
   pipeline = nullptr;
+  // Do not dispose method channel as it is used by multiple players!
+
+  if (OnDisposeEndCallback) {
+    OnDisposeEndCallback(this);
+  } else {
+    logger.warn("OnDisposeEndCallback is null");
+  }
 }
 
 GstStateChangeReturn AudioPlayer::SetPipelineState(GstState state) {
@@ -998,3 +999,30 @@ void print_appsrc_props(GstElement* appsrc) {
 
   logger.log("dropped: %lu", dropped);
 }
+
+void AudioPlayer::SendSuccess(const std::string& event,
+                              const MyVariant& value) {
+  if (!isUsingEventChannel)
+    return;
+
+  if (!_eventChannel) {
+    logger.error("No _eventChannel");
+    return;
+  }
+  if (OnSendSuccessCallback) {
+    OnSendSuccessCallback(_eventChannel, event, value);
+  } else {
+    logger.warn("OnSendSuccessCallbackis null");
+  }
+}
+
+template <typename T>
+std::vector<T> arrayToList(const T* arr, int size) {
+  std::vector<T> list;
+  for (int i = 0; i < size; i++) {
+    list.push_back(arr[i]);
+  }
+  return list;
+}
+
+#include "audio_player_impl_specific.h"

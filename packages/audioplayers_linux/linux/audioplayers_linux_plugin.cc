@@ -11,7 +11,6 @@
 
 #include <map>
 #include <memory>
-#include <sstream>
 
 #include "audio_player.h"
 
@@ -33,6 +32,87 @@ static FlMethodChannel* globalMethods;
 static FlEventChannel* globalEvents;
 static std::map<std::string, std::unique_ptr<AudioPlayer>> audioPlayers;
 
+/* Make sure to free */
+FlValue* mapToFlValueMapVectorDouble(
+    const std::map<std::string, std::vector<double>>& data) {
+  FlValue* map = fl_value_new_map();
+
+  for (const auto& [key, arr] : data) {
+    fl_value_set_string(map, key.c_str(),
+                        fl_value_new_float_list(arr.data(), arr.size()));
+  }
+
+  return map;
+}
+
+/* Make sure to free */
+FlValue* mapToFlValueMapDouble(const std::map<std::string, double>& data) {
+  FlValue* map = fl_value_new_map();
+
+  for (const auto& [key, num] : data) {
+    fl_value_set_string(map, key.c_str(), fl_value_new_float(num));
+  }
+
+  return map;
+}
+
+std::map<std::string, double> flValueMapDoubleToMapDouble(FlValue* flValueMap) {
+  const std::vector<std::string> names{"gain", "bandwidth", "frequency"};
+
+  std::map<std::string, double> map{};
+  for (const std::string& str : names) {
+    auto flNum = fl_value_lookup_string(flValueMap, str.c_str());
+    if (flNum != nullptr) {
+      double num = fl_value_get_float(flNum);
+      map[str] = num;
+    }
+  }
+  return map;
+}
+
+void OnInitEndCallback(AudioPlayer* player) {}
+
+void OnDisposeEndCallback(AudioPlayer* player) {
+  g_clear_object(&(player->_eventChannel));
+  player->_eventChannel = nullptr;
+}
+
+void OnSendSuccessCallback(MyEventChannel* eventChannel,
+                           const std::string& event,
+                           const MyVariant& value) {
+  g_autoptr(FlValue) map = fl_value_new_map();
+  fl_value_set_string(map, "event", fl_value_new_string(event.c_str()));
+  if (value.index() == 0) {
+    std::string str = std::get<std::string>(value);
+    fl_value_set_string(map, "value", fl_value_new_string(str.c_str()));
+  } else if (value.index() == 1) {
+    bool b = std::get<bool>(value);
+    fl_value_set_string(map, "value", fl_value_new_bool(b));
+  } else if (value.index() == 2) {
+    int64_t num = std::get<int64_t>(value);
+    fl_value_set_string(map, "value", fl_value_new_int(num));
+  } else {
+    throw "Bad variant";
+  }
+
+  fl_event_channel_send(eventChannel, map, nullptr, nullptr);
+}
+
+void OnErrorCallback(MyEventChannel* eventChannel,
+                     const std::string& code,
+                     const std::string& message,
+                     const char* details,
+                     GError** error) {
+  if (details != nullptr) {
+    FlValue* detailsFlValue = fl_value_new_string(details);
+    fl_event_channel_send_error(eventChannel, code.c_str(), message.c_str(),
+                                detailsFlValue, nullptr, error);
+  } else {
+    fl_event_channel_send_error(eventChannel, code.c_str(), message.c_str(),
+                                nullptr, nullptr, error);
+  }
+}
+
 static void audioplayers_linux_plugin_create_player(
     const std::string& playerId) {
   g_autoptr(FlStandardMethodCodec) eventCodec = fl_standard_method_codec_new();
@@ -40,7 +120,9 @@ static void audioplayers_linux_plugin_create_player(
       binaryMessenger, ("xyz.luan/audioplayers/events/" + playerId).c_str(),
       FL_METHOD_CODEC(eventCodec));
 
-  auto player = std::make_unique<AudioPlayer>(playerId, methods, eventChannel);
+  auto player = std::make_unique<AudioPlayer>(
+      playerId, methods, eventChannel, OnInitEndCallback, OnDisposeEndCallback,
+      OnSendSuccessCallback, OnErrorCallback);
   audioPlayers.insert(std::make_pair(playerId, std::move(player)));
 }
 
@@ -248,19 +330,21 @@ static void audioplayers_linux_plugin_handle_method_call(
     } else if (strcmp(method, "equalizer.getNumberOfBands") == 0) {
       result = fl_value_new_int(player->GetNumberOfBands());
     } else if (strcmp(method, "equalizer.getLimits") == 0) {
-      result = player->GetLimits();
+      result = mapToFlValueMapVectorDouble(player->GetLimits());
     } else if (strcmp(method, "equalizer.getBand") == 0) {
       auto flValue = fl_value_lookup_string(args, "bandIndex");
       if (flValue != nullptr) {
         int bandIndex = fl_value_get_int(flValue);
-        result = player->GetBand(bandIndex);
+        result = mapToFlValueMapDouble(player->GetBand(bandIndex));
       }
     } else if (strcmp(method, "equalizer.setBand") == 0) {
       auto flIndex = fl_value_lookup_string(args, "bandIndex");
       auto flBand = fl_value_lookup_string(args, "band");
       if (flIndex != nullptr && flBand != nullptr) {
         int bandIndex = fl_value_get_int(flIndex);
-        player->SetBand(bandIndex, flBand);
+        std::map<std::string, double> band =
+            flValueMapDoubleToMapDouble(flBand);
+        player->SetBand(bandIndex, band);
       }
     } else if (strcmp(method, "emitLog") == 0) {
       auto flMessage = fl_value_lookup_string(args, "message");
@@ -281,7 +365,17 @@ static void audioplayers_linux_plugin_handle_method_call(
       return;
     }
 
+    // if (result == nullptr) {
+    //   printf("---------\nresult(%s) is nullptr\n\n", method);
+    // }
+
     response = FL_METHOD_RESPONSE(fl_method_success_response_new(result));
+
+    if (result != nullptr) {
+      printf("\nfree result(%s)\n\n", method);
+      fl_value_unref(result);
+    }
+
     fl_method_call_respond(method_call, response, nullptr);
   } catch (const gchar* error) {
     response = FL_METHOD_RESPONSE(
