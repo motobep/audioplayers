@@ -99,8 +99,8 @@ static void on_enough_data(GstElement* appsrc, gpointer udata) {
 }
 
 AudioPlayer::AudioPlayer(std::string playerId,
-                         FlMethodChannel* methodChannel,
-                         FlEventChannel* eventChannel,
+                         MyMethodChannel* methodChannel,
+                         MyEventChannel* eventChannel,
                          SelfFunc onInitEndCallback,
                          SelfFunc onDisposeEndCallback,
                          OnSendSuccessFunc onSendSuccessCallback,
