@@ -1,15 +1,7 @@
 #pragma once
 
-//#include <flutter_linux/flutter_linux.h>
-
-#include <flutter/event_channel.h>
-#include <flutter/event_stream_handler.h>
-#include <flutter/event_stream_handler_functions.h>
-#include <flutter/method_channel.h>
-#include <flutter/plugin_registrar_windows.h>
-#include <flutter/standard_method_codec.h>
-
-#include "event_stream_handler.h"
+#include "audio_player_win_specific.h"
+#include <gst/pbutils/gstdiscoverer.h>
 
 #include <future>
 #include <map>
@@ -25,6 +17,8 @@
 #include <sstream>
 #include <string>
 
+#include <vector>
+
 #include <cassert>
 
 #define assertm(exp, msg) assert((void(msg), exp))
@@ -36,11 +30,6 @@ extern "C" {
 
 #define __AUDIO_PLAYER_NUM_BUNDS 10
 
-typedef flutter::EncodableValue _FlValue;
-typedef flutter::EncodableMap _EncMap;
-
-typedef uint64_t ssize_t;
-
 typedef enum {
   SRC_STATE_APP = 0,
   SRC_STATE_URI = 1,
@@ -48,10 +37,9 @@ typedef enum {
 
 class AudioPlayer {
  public:
- AudioPlayer::AudioPlayer(
-	 std::string playerId,
-	 flutter::MethodChannel<flutter::EncodableValue>* methodChannel,
-	 EventStreamHandler<>* eventHandler);
+  AudioPlayer(std::string playerId,
+	       MyMethodChannel* methodChannel,
+	       MyEventChannel* eventChannel);
 
   std::optional<int64_t> GetPosition();
 
@@ -72,10 +60,10 @@ class AudioPlayer {
   void SetEnabled(bool isEnabled);
 
   int GetNumberOfBands();
-  _EncMap GetLimits();
+  std::map<std::string, std::vector<double>> GetLimits();
 
-  _EncMap GetBand(int bandIndex);
-  void SetBand(int bandIndex, _EncMap band);
+  std::map<std::string, double> GetBand(int bandIndex);
+  void SetBand(int bandIndex, std::map<std::string, double> band);
 
   void SetBalance(float balance);
 
@@ -93,24 +81,30 @@ class AudioPlayer {
 
   int64_t PushBuffer(const guint8* buffer, ssize_t len);
 
-  void FlushBuffers();
+  void FlushBuffers(bool);
 
   void ReleaseMediaSource();
 
   void OnError(const std::string& code,
 		  const std::string& message,
-		  const flutter::EncodableValue& details,
-		  GError** error
-		  );
+		  const char* details,
+		  GError** error);
 
   void OnLog(const std::string& message);
+
+  void AudioPlayer::SendSuccess(const std::string& event, _FlValue&& value);
 
   virtual ~AudioPlayer();
 
   std::string http_proxy{};
 
+  GstStateChangeReturn SetPipelineState(GstState state);
+  void printPipelineState(const char*);
+
  private:
   // Gst members
+  GstDiscoverer* discoverer;
+
   GstElement* pipeline;
   GstElement* appsrc;
   GstElement* app_decodebin;
@@ -123,7 +117,7 @@ class AudioPlayer {
   GstElement* audiosink = nullptr;
   GstBus* bus = nullptr;
 
-  bool _isInitialized = false;
+  bool _isSourceInitialized = false;
   bool _isPlaying = false;
   bool _isLooping = false;
   bool _isSeekCompleted = true;
@@ -132,21 +126,13 @@ class AudioPlayer {
 
   std::string _url{};
   std::string _playerId;
-  EventStreamHandler<>* _eventHandler;
-
-
-  GMainLoop* _g_main_loop = nullptr;
-  std::thread _thread;
-
-  void thread_start();
-  void thread_end();
-
+  MyEventChannel* _eventChannel;
 
   GObject* eqBands[__AUDIO_PLAYER_NUM_BUNDS];
   float eqWhenDisabledGains[__AUDIO_PLAYER_NUM_BUNDS];
 
   static const int eqNumBands = __AUDIO_PLAYER_NUM_BUNDS;
-  _EncMap _limitsMap = _EncMap{};
+  std::map<std::string, std::vector<double>> _limitsMap{};
   bool _isEnabled = true;
 
   static gboolean OnBusMessage(GstBus* bus,
@@ -156,6 +142,11 @@ class AudioPlayer {
   static gboolean OnRefresh(AudioPlayer* data);
 
   void SetPlayback(int64_t seekTo, double rate);
+
+  std::optional<int64_t> getDurationWithDiscoverer(std::string path);
+
+  void flushBuffersHard();
+  void flushBuffersSoft(bool);
 
   void OnMediaError(GError* error, gchar* debug);
 
@@ -177,7 +168,12 @@ class AudioPlayer {
   void SetBandwidth(int bandIndex, float value);
   void SetFrequency(int bandIndex, float value);
 
-  GstStateChangeReturn SetPipelineState(GstState state);
-
   SrcState GetSrcState();
+
+  // Win
+  GMainLoop* _g_main_loop = nullptr;
+  std::thread _thread;
+
+  void thread_start();
+  void thread_end();
 };

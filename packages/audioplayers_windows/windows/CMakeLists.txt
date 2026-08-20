@@ -71,7 +71,7 @@ target_include_directories(${PLUGIN_NAME} PRIVATE
 target_link_directories(${PLUGIN_NAME} PRIVATE
   "${GSTREAMER_PATH}/lib"
 )
-target_link_libraries(${PLUGIN_NAME} PRIVATE gstreamer-1.0 glib-2.0 gobject-2.0)
+target_link_libraries(${PLUGIN_NAME} PRIVATE gstreamer-1.0 glib-2.0 gobject-2.0 gstpbutils-1.0)
 # gstreamer end
 
 target_link_libraries(${PLUGIN_NAME} PRIVATE ${CMAKE_BINARY_DIR}/packages/Microsoft.Windows.ImplementationLibrary/build/native/Microsoft.Windows.ImplementationLibrary.targets)

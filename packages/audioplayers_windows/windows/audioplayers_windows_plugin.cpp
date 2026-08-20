@@ -49,6 +49,38 @@ T GetArgumentOrFail(const std::string arg, const EncodableValue* args) {
   throw "Bad arg";
 }
 
+EncodableValue mapVectorDoubleToEncodableValue(const std::map<std::string, std::vector<double>>& data) {
+  EncodableMap encoded_map;
+  for (const auto& entry : data) {
+    EncodableList encoded_list;
+    for (double value : entry.second) {
+      encoded_list.push_back(EncodableValue(value));
+    }
+    encoded_map[EncodableValue(entry.first)] = EncodableValue(encoded_list);
+  }
+  return EncodableValue(encoded_map);
+}
+
+EncodableValue mapDoubleToEncodableValue(const std::map<std::string, double>& data) {
+  EncodableMap encoded_map;
+  for (const auto& entry : data) {
+    encoded_map[EncodableValue(entry.first)] = EncodableValue(entry.second);
+  }
+  return EncodableValue(encoded_map);
+}
+
+std::map<std::string, double> encodableMapToMapDouble(EncodableMap encodableMap) {
+    std::map<std::string, double> map{};
+    for (const auto& [key_var, value_var] : encodableMap) {
+      if (const std::string* key = std::get_if<std::string>(&key_var)) {
+	 if (const double* d = std::get_if<double>(&value_var)) {
+           map[*key] = *d;
+         }
+      }
+    }
+    return map;
+}
+
 class AudioplayersWindowsPlugin : public Plugin {
  public:
   static void RegisterWithRegistrar(PluginRegistrarWindows* registrar);
@@ -218,7 +250,7 @@ printf("method name: '%s'\n", method_call.method_name().c_str());
       result->Success(EncodableValue(ok));
       return;
   } else if (method_call.method_name().compare("flushBuffers") == 0) {
-      player->FlushBuffers();
+      player->FlushBuffers(true);
   } else if (method_call.method_name().compare("getDuration") == 0) {
     auto optDuration = player->GetDuration(); // +
     result->Success(optDuration.has_value()
@@ -265,16 +297,19 @@ printf("method name: '%s'\n", method_call.method_name().c_str());
     result->Success(EncodableValue(player->GetNumberOfBands()));
     return;
   } else if (method_call.method_name().compare("equalizer.getLimits") == 0) {
-    result->Success(EncodableValue(player->GetLimits()));
+    EncodableValue val = mapVectorDoubleToEncodableValue(player->GetLimits());
+    result->Success(val);
     return;
   } else if (method_call.method_name().compare("equalizer.getBand") == 0) {
     int bandIndex = GetArgumentOrFail<int>("bandIndex", args);
-    result->Success(EncodableValue(player->GetBand(bandIndex)));
+    EncodableValue val = mapDoubleToEncodableValue(player->GetBand(bandIndex));
+    result->Success(val);
     return;
   } else if (method_call.method_name().compare("equalizer.setBand") == 0) {
     int bandIndex = GetArgumentOrFail<int>("bandIndex", args);
     EncodableMap band = GetArgumentOrFail<EncodableMap>("band", args);
-    player->SetBand(bandIndex, band);
+    auto map = encodableMapToMapDouble(band);
+    player->SetBand(bandIndex, map);
   } else if (method_call.method_name().compare("emitLog") == 0) {
     auto message = GetArgument<std::string>("message", args, std::string()); // +
     player->OnLog(message);

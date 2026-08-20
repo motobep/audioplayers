@@ -6,6 +6,10 @@
 !audio_player.cc
 !audio_player.h
 !audioplayers_windows_plugin.cpp
+!event_stream_handler.h
+
+!audio_player_win_specific.h
+!audio_player_impl_specific.h
 
 !include/
 !dlls/
