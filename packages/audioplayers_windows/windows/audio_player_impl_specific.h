@@ -5,7 +5,7 @@ void loop_func(GMainLoop **_g_main_loop_ptr) {
   logger.log("loop func");
   logger.log("main loop new");
   *_g_main_loop_ptr = g_main_loop_new(NULL, FALSE);
-GMainLoop *loop = *_g_main_loop_ptr;
+  GMainLoop *loop = *_g_main_loop_ptr;
   logger.log("loop p: %p", loop);
   logger.log(">>> main loop");
   g_main_loop_run(loop);

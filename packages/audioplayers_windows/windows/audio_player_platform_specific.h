@@ -8,19 +8,10 @@
 #include "event_stream_handler.h"
 
 typedef flutter::EncodableValue _FlValue;
+typedef flutter::EncodableValue MyVariant;
 
 typedef flutter::MethodChannel<_FlValue> MyMethodChannel;
 typedef EventStreamHandler<> MyEventChannel;
 
 typedef uint64_t ssize_t;
-
-
-template<typename T>
-std::vector<T> arrayToList(const T* arr, int size) {
-	std::vector<T> list;
-	for (int i = 0; i < size; i++) {
-		list.push_back(arr[i]);
-	}
-	return list;
-}
 

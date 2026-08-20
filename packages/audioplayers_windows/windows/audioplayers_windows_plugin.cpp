@@ -81,6 +81,42 @@ std::map<std::string, double> encodableMapToMapDouble(EncodableMap encodableMap)
     return map;
 }
 
+void OnInitEndCallback(AudioPlayer* player) {
+  player->thread_start();
+}
+
+void OnDisposeEndCallback(AudioPlayer* player) {
+  player->_eventChannel = nullptr;
+
+  player->thread_end();
+}
+
+void OnSendSuccessCallback(MyEventChannel* eventChannel,
+		const std::string& event,
+		const MyVariant& value) {
+	eventChannel->Success(
+			std::make_unique<_FlValue>(
+				flutter::EncodableMap{
+				{_FlValue("event"), _FlValue(event.c_str())},
+				{_FlValue("value"), value}
+				}
+				)
+			);
+}
+
+void OnErrorCallback(MyEventChannel* eventChannel,
+		const std::string& code,
+		const std::string& message,
+		const char* details,
+		GError** error) {
+	  if (details != nullptr) {
+		  _FlValue detailsFlValue = _FlValue(details);
+		  eventChannel->Error(code, message, detailsFlValue);
+	  } else {
+		  eventChannel->Error(code, message, nullptr);
+	  }
+}
+
 class AudioplayersWindowsPlugin : public Plugin {
  public:
   static void RegisterWithRegistrar(PluginRegistrarWindows* registrar);
@@ -342,7 +378,8 @@ void AudioplayersWindowsPlugin::CreatePlayer(std::string playerId) {
   eventChannel->SetStreamHandler(std::move(_ptr));
 
   auto player =
-      std::make_unique<AudioPlayer>(playerId, methods.get(), eventHandler);
+      std::make_unique<AudioPlayer>(playerId, methods.get(), eventHandler,
+					OnInitEndCallback, OnDisposeEndCallback, OnSendSuccessCallback, OnErrorCallback);
   audioPlayers.insert(std::make_pair(playerId, std::move(player)));
 }
 

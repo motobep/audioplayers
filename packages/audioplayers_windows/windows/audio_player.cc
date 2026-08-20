@@ -14,6 +14,9 @@ extern "C" {
 
 void print_appsrc_props(GstElement* appsrc);
 
+template <typename T>
+std::vector<T> arrayToList(const T* arr, int size);
+
 Logger logger{};
 
 inline float getInBounds(float value, float min, float max) {
@@ -96,9 +99,18 @@ static void on_enough_data(GstElement* appsrc, gpointer udata) {
 }
 
 AudioPlayer::AudioPlayer(std::string playerId,
-		MyMethodChannel* methodChannel,
-		MyEventChannel* eventChannel)
-	: _playerId(playerId), _eventChannel(eventChannel) {
+                         MyMethodChannel* methodChannel,
+                         MyEventChannel* eventChannel,
+                         SelfFunc onInitEndCallback,
+                         SelfFunc onDisposeEndCallback,
+                         OnSendSuccessFunc onSendSuccessCallback,
+                         OnErrorFunc onErrorCallback)
+    : _playerId(playerId),
+      _eventChannel(eventChannel),
+      OnInitEndCallback(onInitEndCallback),
+      OnDisposeEndCallback(onDisposeEndCallback),
+      OnSendSuccessCallback(onSendSuccessCallback),
+      OnErrorCallback(onErrorCallback) {
   logger.log("AudioPlayer()");
   // GStreamer lib only needs to be initialized once, but doing it while
   // registering the plugin can be problematic as it likely needs a GUI to be
@@ -125,7 +137,7 @@ AudioPlayer::AudioPlayer(std::string playerId,
   audioresample = gst_element_factory_make("audioresample", "audioresample");
   volume_elem = gst_element_factory_make("volume", "volume_elem");
   equalizer = gst_element_factory_make("equalizer-nbands", "equalizer");
-  //panorama = gst_element_factory_make("audiopanorama", NULL);
+  // panorama = gst_element_factory_make("audiopanorama", NULL);
   audiosink = gst_element_factory_make("autoaudiosink", NULL);
 
   // Setup equalizer and stereo balance controller
@@ -166,7 +178,7 @@ AudioPlayer::AudioPlayer(std::string playerId,
   g_signal_connect(appsrc, "need-data", G_CALLBACK(on_need_data), NULL);
 
   // Set panorama and equalizer
-  //g_object_set(G_OBJECT(panorama), "method", 1, NULL);
+  // g_object_set(G_OBJECT(panorama), "method", 1, NULL);
   g_object_set(G_OBJECT(equalizer), "num-bands", AudioPlayer::eqNumBands, NULL);
 
   // Set bands
@@ -186,10 +198,9 @@ AudioPlayer::AudioPlayer(std::string playerId,
   const double frequencyLimits[] = {20.0, 20000.0};
 
   std::map<std::string, std::vector<double>> map{
-	{ "gain", arrayToList(gainLimits, 2) },
-	{ "bandwidth", arrayToList(bandwidthLimits, 2) },
-	{ "frequency", arrayToList(frequencyLimits, 2) }
-  };
+      {"gain", arrayToList(gainLimits, 2)},
+      {"bandwidth", arrayToList(bandwidthLimits, 2)},
+      {"frequency", arrayToList(frequencyLimits, 2)}};
 
   _limitsMap = map;
 
@@ -202,8 +213,11 @@ AudioPlayer::AudioPlayer(std::string playerId,
   _refreshId = g_timeout_add(APP_REFRESH_TIME,
                              (GSourceFunc)AudioPlayer::OnRefresh, this);
 
-  logger.log("_refreshId: %u", _refreshId);
-  thread_start();
+  if (OnInitEndCallback) {
+    OnInitEndCallback(this);
+  } else {
+    logger.warn("OnInitEndCallback is null");
+  }
 }
 
 AudioPlayer::~AudioPlayer() {}
@@ -215,7 +229,7 @@ void AudioPlayer::SetSourceUrl(std::string url) {
   if (srcState == SRC_STATE_APP) {
     // Stop pipeline
     SetPipelineState(GST_STATE_NULL);
-    
+
     // Unset urldecodebin
     logger.log("Unset appsrc");
     // gst_element_unlink(appsrc, app_decodebin);
@@ -502,18 +516,15 @@ void AudioPlayer::OnMediaError(GError* error, gchar* debug) {
 }
 
 void AudioPlayer::OnError(const std::string& code,
-		const std::string& message,
-		const char* details,
-		GError** error // TODO: handle arg
-		) {
+                          const std::string& message,
+                          const char* details,
+                          GError** error) {
   if (this->_eventChannel) {
-	  // TODO: check
-	  if (details != nullptr) {
-		  _FlValue detailsFlValue = _FlValue(details);
-		  this->_eventChannel->Error(code, message, details);
-	  } else {
-		  this->_eventChannel->Error(code, message, nullptr);
-	  }
+    if (OnErrorCallback) {
+      OnErrorCallback(this->_eventChannel, code, message, details, error);
+    } else {
+      logger.warn("OnErrorCallback is null");
+    }
   } else {
     std::ostringstream oss;
     oss << "Error: " << code << "; message=" << message;
@@ -545,45 +556,32 @@ void AudioPlayer::OnMediaStateChange(GstObject* src,
 
 void AudioPlayer::OnPrepared(bool isPrepared) {
   logger.log("isPrepared: %u", isPrepared);
-  if (this->_eventChannel) {
-    this->SendSuccess("audio.onPrepared", _FlValue(isPrepared));
-  }
+  this->SendSuccess("audio.onPrepared", MyVariant(isPrepared));
 }
 
 void AudioPlayer::OnPositionUpdate() {
-  if (this->_eventChannel) {
-    int64_t position = GetPosition().value_or(0);
-    this->SendSuccess("audio.onCurrentPosition", _FlValue(position));
-  }
+  int64_t position = GetPosition().value_or(0);
+  this->SendSuccess("audio.onCurrentPosition", MyVariant(position));
 }
 
 void AudioPlayer::OnDurationUpdate() {
-  if (this->_eventChannel) {
-    int64_t duration = GetDuration().value_or(0);
-    this->SendSuccess("audio.onDuration", _FlValue(duration));
-  }
+  logger.log("OnDurationUpdate");
+  int64_t duration = GetDuration().value_or(0);
+  this->SendSuccess("audio.onDuration", MyVariant(duration));
 }
 
 void AudioPlayer::OnSeekCompleted() {
-  if (this->_eventChannel) {
-    OnPositionUpdate();
-    this->SendSuccess("audio.onSeekComplete", _FlValue(true));
-  }
+  OnPositionUpdate();
+  this->SendSuccess("audio.onSeekComplete", MyVariant(true));
 }
 
 void AudioPlayer::OnPlaybackEnded() {
-  if (this->_eventChannel) {
-    this->SendSuccess("audio.onComplete", _FlValue(true));
-  }
+  this->SendSuccess("audio.onComplete", MyVariant(true));
 }
 
 void AudioPlayer::OnLog(const std::string& message) {
   logger.log("OnLog");
-  if (_eventChannel == nullptr) {
-    logger.log("_eventChannel is NULL");
-    return;
-  }
-  this->SendSuccess("audio.onLog", _FlValue(message));
+  this->SendSuccess("audio.onLog", MyVariant(message));
   logger.log("OnLog return");
 }
 
@@ -601,7 +599,7 @@ void AudioPlayer::SetEnabled(bool isEnabled) {
         // Saving previous gains
         gdouble gain;
         g_object_get(AudioPlayer::eqBands[i], "gain", &gain, NULL);
-        eqWhenDisabledGains[i] = (float) gain;
+        eqWhenDisabledGains[i] = (float)gain;
         // Disable current gains
         SetGain(i, 0.0);
       }
@@ -643,22 +641,20 @@ std::map<std::string, double> AudioPlayer::GetBand(int bandIndex) {
   g_object_get(AudioPlayer::eqBands[bandIndex], "freq", &freq, NULL);
 
   std::map<std::string, double> map{
-		  {"gain", gain},
-		  {"bandwidth", bandwidth},
-		  {"frequency", freq}
-		  };
+      {"gain", gain}, {"bandwidth", bandwidth}, {"frequency", freq}};
 
   return map;
 }
 
-
 template <typename T>
-static T mapAt(const std::map<std::string, gdouble>& map, const std::string arg) {
-	const auto& value = map.at(arg);
-	return value;
+static T mapAt(const std::map<std::string, gdouble>& map,
+               const std::string arg) {
+  const auto& value = map.at(arg);
+  return value;
 }
-static bool mapHas(const std::map<std::string, gdouble>& map, const std::string arg) {
-	return map.find(arg) != map.end();
+static bool mapHas(const std::map<std::string, gdouble>& map,
+                   const std::string arg) {
+  return map.find(arg) != map.end();
 }
 
 void AudioPlayer::SetBand(int bandIndex, std::map<std::string, double> band) {
@@ -671,17 +667,17 @@ void AudioPlayer::SetBand(int bandIndex, std::map<std::string, double> band) {
 
   if (mapHas(map, "gain")) {
     double value = mapAt<double>(map, "gain");
-    SetGain(bandIndex, (float) value);
+    SetGain(bandIndex, (float)value);
   }
 
   if (mapHas(map, "bandwidth")) {
     double value = mapAt<double>(map, "bandwidth");
-    SetBandwidth(bandIndex, (float) value);
+    SetBandwidth(bandIndex, (float)value);
   }
 
   if (mapHas(map, "frequency")) {
     double value = mapAt<double>(map, "frequency");
-    SetFrequency(bandIndex, (float) value);
+    SetFrequency(bandIndex, (float)value);
   }
 }
 
@@ -848,7 +844,7 @@ std::optional<int64_t> AudioPlayer::getDurationWithDiscoverer(
     return std::nullopt;
   }
 
-  int64_t ms = (int64_t) (duration / GST_MSECOND);
+  int64_t ms = (int64_t)(duration / GST_MSECOND);
   logger.log("Discoverer Duration: %02u", ms);
   return std::make_optional(duration / 1000000);
 }
@@ -935,15 +931,18 @@ void AudioPlayer::Dispose() {
   bin_remove_and_null(GST_BIN(pipeline), &audioresample);
   bin_remove_and_null(GST_BIN(pipeline), &volume_elem);
   bin_remove_and_null(GST_BIN(pipeline), &equalizer);
-  //bin_remove_and_null(GST_BIN(pipeline), &panorama);
+  // bin_remove_and_null(GST_BIN(pipeline), &panorama);
   bin_remove_and_null(GST_BIN(pipeline), &audiosink);
 
   gst_object_unref(GST_OBJECT(pipeline));
-  // Do not dispose method channel as it is used by multiple players!
-  _eventChannel = nullptr;
   pipeline = nullptr;
+  // Do not dispose method channel as it is used by multiple players!
 
-  thread_end();
+  if (OnDisposeEndCallback) {
+    OnDisposeEndCallback(this);
+  } else {
+    logger.warn("OnDisposeEndCallback is null");
+  }
 }
 
 GstStateChangeReturn AudioPlayer::SetPipelineState(GstState state) {
@@ -1001,16 +1000,29 @@ void print_appsrc_props(GstElement* appsrc) {
   logger.log("dropped: %lu", dropped);
 }
 
+void AudioPlayer::SendSuccess(const std::string& event,
+                              const MyVariant& value) {
+  if (!isUsingEventChannel)
+    return;
 
-void AudioPlayer::SendSuccess(const std::string& event, _FlValue&& value) {
-  this->_eventChannel->Success(
-	  std::make_unique<_FlValue>(
-		  flutter::EncodableMap{
-		  {_FlValue("event"), _FlValue(event.c_str())},
-		  {_FlValue("value"), value}
-		  }
-	  )
-  );
+  if (!_eventChannel) {
+    logger.error("No _eventChannel");
+    return;
+  }
+  if (OnSendSuccessCallback) {
+    OnSendSuccessCallback(_eventChannel, event, value);
+  } else {
+    logger.warn("OnSendSuccessCallbackis null");
+  }
+}
+
+template <typename T>
+std::vector<T> arrayToList(const T* arr, int size) {
+  std::vector<T> list;
+  for (int i = 0; i < size; i++) {
+    list.push_back(arr[i]);
+  }
+  return list;
 }
 
 #include "audio_player_impl_specific.h"

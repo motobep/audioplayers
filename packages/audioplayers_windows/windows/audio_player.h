@@ -1,7 +1,7 @@
 #pragma once
 
-#include "audio_player_win_specific.h"
 #include <gst/pbutils/gstdiscoverer.h>
+#include "audio_player_platform_specific.h"
 
 #include <future>
 #include <map>
@@ -12,10 +12,6 @@
 
 // STL headers
 #include <functional>
-#include <map>
-#include <memory>
-#include <sstream>
-#include <string>
 
 #include <vector>
 
@@ -24,8 +20,8 @@
 #define assertm(exp, msg) assert((void(msg), exp))
 
 extern "C" {
-#include <gst/gst.h>
 #include <gst/app/gstappsrc.h>
+#include <gst/gst.h>
 }
 
 #define __AUDIO_PLAYER_NUM_BUNDS 10
@@ -37,9 +33,23 @@ typedef enum {
 
 class AudioPlayer {
  public:
+  using SelfFunc = void (*)(AudioPlayer*);
+  using OnSendSuccessFunc = void (*)(MyEventChannel* eventChannel,
+                                     const std::string& event,
+                                     const MyVariant& value);
+  using OnErrorFunc = void (*)(MyEventChannel* eventChannel,
+                               const std::string& code,
+                               const std::string& message,
+                               const char* details,
+                               GError** error);
+
   AudioPlayer(std::string playerId,
-	       MyMethodChannel* methodChannel,
-	       MyEventChannel* eventChannel);
+              MyMethodChannel* methodChannel,
+              MyEventChannel* eventChannel,
+              SelfFunc onInitEndCallback,
+              SelfFunc onDisposeEndCallback,
+              OnSendSuccessFunc onSendSuccessCallback,
+              OnErrorFunc onErrorCallback);
 
   std::optional<int64_t> GetPosition();
 
@@ -86,17 +96,19 @@ class AudioPlayer {
   void ReleaseMediaSource();
 
   void OnError(const std::string& code,
-		  const std::string& message,
-		  const char* details,
-		  GError** error);
+               const std::string& message,
+               const char* details,
+               GError** error);
 
   void OnLog(const std::string& message);
 
-  void AudioPlayer::SendSuccess(const std::string& event, _FlValue&& value);
+  void SendSuccess(const std::string& event, const MyVariant& value);
 
   virtual ~AudioPlayer();
 
   std::string http_proxy{};
+
+  bool isUsingEventChannel = true;
 
   GstStateChangeReturn SetPipelineState(GstState state);
   void printPipelineState(const char*);
@@ -113,7 +125,7 @@ class AudioPlayer {
   GstElement* audioresample;
   GstElement* volume_elem;
   GstElement* equalizer = nullptr;
-  GstElement* panorama = nullptr;
+  // GstElement* panorama = nullptr;
   GstElement* audiosink = nullptr;
   GstBus* bus = nullptr;
 
@@ -126,7 +138,16 @@ class AudioPlayer {
 
   std::string _url{};
   std::string _playerId;
+
+ public:
+  // Think about making private again
   MyEventChannel* _eventChannel;
+
+ private:
+  SelfFunc OnInitEndCallback = nullptr;
+  SelfFunc OnDisposeEndCallback = nullptr;
+  OnSendSuccessFunc OnSendSuccessCallback = nullptr;
+  OnErrorFunc OnErrorCallback = nullptr;
 
   GObject* eqBands[__AUDIO_PLAYER_NUM_BUNDS];
   float eqWhenDisabledGains[__AUDIO_PLAYER_NUM_BUNDS];
@@ -170,10 +191,5 @@ class AudioPlayer {
 
   SrcState GetSrcState();
 
-  // Win
-  GMainLoop* _g_main_loop = nullptr;
-  std::thread _thread;
-
-  void thread_start();
-  void thread_end();
+  #include "audio_player_definition_specific.h"
 };
