@@ -46,10 +46,10 @@ class AudioPlayer {
   AudioPlayer(std::string playerId,
               MyMethodChannel* methodChannel,
               MyEventChannel* eventChannel,
-              SelfFunc onInitEndCallback = nullptr,
-              SelfFunc onDisposeEndCallback = nullptr,
-              OnSendSuccessFunc onSendSuccessCallback = nullptr,
-              OnErrorFunc onErrorCallback = nullptr);
+              SelfFunc onInitEndCallback,
+              SelfFunc onDisposeEndCallback,
+              OnSendSuccessFunc onSendSuccessCallback,
+              OnErrorFunc onErrorCallback);
 
   std::optional<int64_t> GetPosition();
 
@@ -190,4 +190,6 @@ class AudioPlayer {
   void SetFrequency(int bandIndex, float value);
 
   SrcState GetSrcState();
+
+#include "audio_player_definition_specific.h"
 };
