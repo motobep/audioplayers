@@ -16,10 +16,13 @@
 #include <sstream>
 
 #include "audio_player.h"
+#include "Logger.h"
 
 namespace {
 
 using namespace flutter;
+
+Logger logger{};
 
 template <typename T>
 T GetArgument(const std::string arg, const EncodableValue* args, T fallback) {
@@ -81,14 +84,71 @@ std::map<std::string, double> encodableMapToMapDouble(EncodableMap encodableMap)
     return map;
 }
 
+void loop_func(GMainLoop **g_main_loop_ptr) {
+  logger.log("loop func");
+  logger.log("main loop new");
+  *g_main_loop_ptr = g_main_loop_new(NULL, FALSE);
+  GMainLoop *loop = *g_main_loop_ptr;
+  logger.log("loop p: %p", loop);
+  logger.log(">>> main loop");
+  g_main_loop_run(loop);
+  logger.log("<<< main loop");
+}
+
+std::map<const std::string, std::pair<std::thread, GMainLoop*>> threadsPool{};
+
+void thread_start(const std::string id) {
+	logger.log("Thread start id=%s", id.c_str());
+	// Create thread, g_main_loop
+	auto pair = threadsPool.find(id);
+	if (pair != threadsPool.end()) {
+		logger.error("Id=%s already exists", id.c_str());
+		return;
+	}
+
+	GMainLoop* g_main_loop = nullptr;
+	std::thread thread = std::thread(loop_func, &g_main_loop);
+	auto threadWithGLoop = std::make_pair(std::move(thread), std::move(g_main_loop));
+	threadsPool.insert({id, std::move(threadWithGLoop)});
+}
+
+void thread_end(std::string id) {
+	// Delete thread, g_main_loop
+  logger.log("Thread end id=%s", id.c_str());
+
+  auto keyValue = threadsPool.find(id);
+	if (keyValue == threadsPool.end()) {
+		logger.error("No thread with id: %s", id.c_str());
+    return;
+  }
+	auto& threadWithGLoop = keyValue->second;
+	std::thread& thread = threadWithGLoop.first;
+	GMainLoop* g_main_loop = threadWithGLoop.second;
+	if (g_main_loop != NULL) {
+		logger.log("GLoop quit");
+		g_main_loop_quit(g_main_loop);
+		g_main_loop_unref(g_main_loop);
+	} else {
+		logger.error("---------\n[ERROR]: GLoop is NULL");
+	}
+
+	logger.log("Joining thread ...");
+	thread.join();
+	logger.log("Joined");
+
+	threadsPool.erase(id);
+}
+
 void OnInitEndCallback(AudioPlayer* player) {
-  player->thread_start();
+	std::string id = player->_playerId;
+	thread_start(id);
 }
 
 void OnDisposeEndCallback(AudioPlayer* player) {
-  player->_eventChannel = nullptr;
+	player->_eventChannel = nullptr;
 
-  player->thread_end();
+	std::string id = player->_playerId;
+	thread_end(id);
 }
 
 void OnSendSuccessCallback(MyEventChannel* eventChannel,

@@ -137,10 +137,10 @@ class AudioPlayer {
   guint _refreshId;
 
   std::string _url{};
-  std::string _playerId;
 
  public:
   // Think about making private again
+  std::string _playerId;
   MyEventChannel* _eventChannel;
 
  private:
