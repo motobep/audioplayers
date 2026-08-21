@@ -26,7 +26,7 @@ class Logger {
 
  public:
   Logger() {
-    const char* env_p = getenv("IS_LINUX_LOG");
+    const char* env_p = getenv("IS_GST_PLAYER_LOG");
 
     if (env_p != nullptr) {
       if (std::string(env_p) == "1") {

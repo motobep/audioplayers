@@ -7,6 +7,7 @@
 !audio_player.h
 !audioplayers_windows_plugin.cpp
 !event_stream_handler.h
+!Logger.h
 
 !audio_player_platform_specific.h
 !audio_player_definition_specific.h
