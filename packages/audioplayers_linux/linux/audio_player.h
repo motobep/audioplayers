@@ -190,6 +190,4 @@ class AudioPlayer {
   void SetFrequency(int bandIndex, float value);
 
   SrcState GetSrcState();
-
-#include "audio_player_definition_specific.h"
 };
