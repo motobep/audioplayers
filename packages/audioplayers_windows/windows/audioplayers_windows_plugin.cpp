@@ -40,15 +40,34 @@ T GetArgument(const std::string arg, const EncodableValue* args, T fallback) {
 
 template <typename T>
 T GetArgumentOrFail(const std::string arg, const EncodableValue* args) {
-  const auto* arguments = std::get_if<EncodableMap>(args);
-  if (arguments) {
-    auto result_it = arguments->find(EncodableValue(arg));
-    if (result_it != arguments->end()) {
-      if (!result_it->second.IsNull())
-        return std::get<T>(result_it->second);
-    }
-  }
-  printf("Bad arg: %s\n", arg.c_str());;
+	const auto* arguments = std::get_if<EncodableMap>(args);
+	if (arguments) {
+		auto result_it = arguments->find(EncodableValue(arg));
+		assert(!std::holds_alternative<int32_t>(result_it->second));
+		if (result_it != arguments->end()) {
+			if (!result_it->second.IsNull()) {
+				return std::get<T>(result_it->second);
+			}
+		}
+	}
+	logger.log("Bad arg: %s", arg.c_str());
+	throw "Bad arg";
+}
+
+int64_t GetLongValueOrFail(const std::string arg, const EncodableValue* args) {
+	const auto* arguments = std::get_if<EncodableMap>(args);
+	if (arguments) {
+		auto result_it = arguments->find(EncodableValue(arg));
+		if (result_it != arguments->end()) {
+			if (!result_it->second.IsNull()) {
+				if (std::holds_alternative<int32_t>(result_it->second)) {
+					return std::get<int32_t>(result_it->second);
+				}
+				return  std::get<int64_t>(result_it->second);
+			}
+		}
+	}
+  logger.log("Bad arg: %s", arg.c_str());
   throw "Bad arg";
 }
 
@@ -97,6 +116,7 @@ void loop_func(GMainLoop **g_main_loop_ptr) {
 
 std::map<const std::string, std::pair<std::thread, GMainLoop*>> threadsPool{};
 
+//bool has_thread = false;
 void thread_start(const std::string id) {
 	logger.log("Thread start id=%s", id.c_str());
 	// Create thread, g_main_loop
@@ -105,6 +125,11 @@ void thread_start(const std::string id) {
 		logger.error("Id=%s already exists", id.c_str());
 		return;
 	}
+	// if (has_thread) {
+	// 	logger.log("has thread already, return");
+	// 	return;
+	// }
+	//has_thread = true;
 
 	GMainLoop* g_main_loop = nullptr;
 	std::thread thread = std::thread(loop_func, &g_main_loop);
@@ -280,7 +305,7 @@ void AudioplayersWindowsPlugin::HandleMethodCall(
     const MethodCall<EncodableValue>& method_call,
     std::unique_ptr<MethodResult<EncodableValue>> result) {
   auto args = method_call.arguments();
-printf("method name: '%s'\n", method_call.method_name().c_str());
+  logger.log("method name: '%s'", method_call.method_name().c_str());
 
   auto playerId = GetArgument<std::string>("playerId", args, std::string());
   if (playerId.empty()) {
@@ -305,8 +330,13 @@ printf("method name: '%s'\n", method_call.method_name().c_str());
     return;
   }
 
-  if (method_call.method_name().compare("pause") == 0) {
-    player->Pause(); // +
+	if (method_call.method_name().compare("setHttpProxy") == 0) {
+		logger.log("setHttpProxy");
+    auto http_proxy = GetArgument<std::string>("http_proxy", args, std::string()); // +
+		logger.log("http_proxy: %s", http_proxy.c_str());
+		player->http_proxy = http_proxy;
+	} else if (method_call.method_name().compare("pause") == 0) {
+		player->Pause(); // +
   } else if (method_call.method_name().compare("resume") == 0) {
     player->Resume(); // +
   } else if (method_call.method_name().compare("stop") == 0) {
@@ -331,9 +361,9 @@ printf("method name: '%s'\n", method_call.method_name().c_str());
       if (isLocal) {
         url = std::string("file://" "/") + url;
       }
-      printf("<> setSourceUrl\n");
+      logger.log(">>> setSourceUrl");
       player->SetSourceUrl(url);
-      printf("<<< setSourceUrl\n");
+      logger.log("<<< setSourceUrl");
   } else if (method_call.method_name().compare("setSourceBytes") == 0) {
       result->Error("WindowsAudioError", "Unimplemented setSourceBytes", nullptr); // +
       return;
@@ -341,7 +371,7 @@ printf("method name: '%s'\n", method_call.method_name().c_str());
       player->SetSourceByteStream();
   } else if (method_call.method_name().compare("pushBuffer") == 0) {
       const guint8* buffer = GetArgumentOrFail<std::vector<uint8_t>>("buffer", args).data();
-      int64_t len = GetArgumentOrFail<int64_t>("len", args);
+      int64_t len = GetLongValueOrFail("len", args);
       int64_t ok = player->PushBuffer(buffer, len);
       result->Success(EncodableValue(ok));
       return;
