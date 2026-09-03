@@ -243,6 +243,10 @@ void AudioPlayer::SetSourceUrl(std::string url) {
     }
 
     gst_bin_add(GST_BIN(pipeline), uridecodebin);
+
+    // Set audiosink sync=true (default value)
+    logger.log("urisrc audiosink sync=true");
+    g_object_set(audiosink, "sync", true, NULL);
   }
 
   if (_url != url) {
@@ -299,6 +303,10 @@ void AudioPlayer::SetSourceByteStream() {
       perror("bad linking\n");
       throw "Can't link appsrc\n";
     }
+
+    // Set audiosink sync=false to not drop late buffers
+    logger.log("appsrc audiosink sync=false");
+    g_object_set(audiosink, "sync", false, NULL);
 
     if (pipeline->current_state != GST_STATE_READY) {
       GstStateChangeReturn ret = SetPipelineState(GST_STATE_READY);
